@@ -235,7 +235,7 @@ export default function Home() {
               <div className="flex items-center gap-2">
                 <WorkflowIcon className="h-3.5 w-3.5 text-warning" />
                 <h3 className="text-[13.5px] font-semibold tracking-tight">
-                  Fluxos agênticos pendentes de aprovação
+                  Alertas de Workflows
                 </h3>
               </div>
               {pendingApprovals.length > 0 && (

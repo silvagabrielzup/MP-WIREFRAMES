@@ -4,7 +4,7 @@
 
 - [x] 01-home — Home / Landing (2026-05-12T00:00:00Z) — shell de router + Layout (sidebar/topbar) + Home com hero, workflows live, grid de 7 motores e 2 colunas de atividade
 
-- [x] 02-workflow-tracker-list — Workflow Tracker: Lista (2026-05-12T00:00:00Z) — tabela densa de 25 workflows com status chips clicáveis, filter bar sticky, mini progress bar em running/awaiting e painel lateral com timeline + sensores + ações
+- [ ] 02-workflow-tracker-list — Workflow Tracker: Lista (2026-05-12T00:00:00Z) — tabela densa de 25 workflows com status chips clicáveis, filter bar sticky, mini progress bar em running/awaiting e painel lateral com timeline + sensores + ações . Mostrar somente os workflows que estajam com o status de running , para mostrar outros status , será via filtro 
 
 - [x] 03-workflow-tracker-detail — Workflow Tracker: Detalhe (2026-05-12T00:00:00Z) — header com status live + ações, progress bar dividida pelos 4 verbos, tabs (Timeline/Tools/Sensores/Auditoria/Replay/Custo), timeline em 2 colunas com 13 steps agrupados por Build/Deploy/Migration/Rollout, painel direito sticky com Input/Output/Sensores/Decisão do agente colapsáveis
 

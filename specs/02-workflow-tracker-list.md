@@ -16,8 +16,6 @@ Layout:
 
 &#x20; - Indicador "live · 23 ativos"
 
-
-
 \- Barra de filtros (sticky abaixo do header):
 
 &#x20; - Search por workflow\_id, SA, user
@@ -30,13 +28,10 @@ Layout:
 
 &#x20; - Select de tempo (last 1h, 24h, 7d, 30d)
 
-&#x20; - Toggle: "Só meus workflows"
-
-
 
 \- Tabela densa (não cards):
 
-&#x20; - Colunas: Status badge | Workflow ID | Tipo | SA | Usuário (avatar+nome) | Início | Duração | Custo (R$) | Step atual
+&#x20; - Colunas: Status badge | Workflow ID | Tipo | Início | Duração | Custo (R$) | Step atual
 
 &#x20; - Row hover destaca
 
@@ -52,14 +47,9 @@ Layout:
 
 &#x20;   - Cinza: cancelled
 
-&#x20; - Em running, mostre mini progress bar embaixo do row
-
-&#x20; - Coluna "Step atual" mostra ícone do verbo Vanilla atual (build/deploy/migration/rollout)
-
 &#x20; - Click no row vai pro detalhe
 
 &#x20; - Paginação ou infinite scroll
-
 
 
 \- Painel lateral direito colapsável (default fechado):
@@ -71,16 +61,15 @@ Layout:
 &#x20; - Botões: "Ver detalhe completo", "Replay"
 
 
-
 Dados mockados:
 
-\- 20-30 linhas variadas com diferentes SAs, status, tipos, durações
+\- 5-10 linhas variadas com diferentes SAs, status, tipos, durações
 
-\- Pelo menos 3 em running visível
+\- Pelo menos 2 em running visível
 
-\- 2 em awaiting human
+\- 1 em awaiting human
 
-\- 2 com failure
+\- 1 com failure
 
 \- Mistura de success de diferentes tempos
 

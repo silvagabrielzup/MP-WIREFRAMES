@@ -40,6 +40,12 @@ jobs:
         run: npm ci
       - name: Setup Pages
         uses: actions/configure-pages@v5
+        with:
+          # Enable Pages and force the source to GitHub Actions (not "Deploy
+          # from a branch"). Without this, the workflow builds successfully
+          # but Pages keeps serving raw branch files, so requests for the
+          # source entry like /src/main.tsx 404.
+          enablement: true
       - name: Build
         env:
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
