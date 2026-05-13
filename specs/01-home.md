@@ -33,7 +33,17 @@ Layout:
 
 &#x20; - Violações de policy novas
 
-\## Seção 3 — Workflows em andamento (mais importante, real-time)
+\## Seção 3 — Histórias do UIClick (2 colunas)
+
+\- Coluna esquerda: ""
+
+&#x20; - Lista de 5 Histórias
+
+\- Coluna direita: "Últimas histórias"
+
+&#x20; - Criação de dashboard
+
+\## Seção 4 — Workflows em andamento (mais importante, real-time)
 
 \- Título: "Em execução agora"
 

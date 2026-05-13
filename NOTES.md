@@ -29,3 +29,13 @@
 - 3 aprovações pendentes, cada uma com policy Komply real (data-classification, network egress, CVE), approver e tempo aguardando. Marca como "vermelho" se > 60min (overdue).
 - Painel SA tem 3 SAs mockadas com atividade detalhada (`ssa-pix-core`, `ssa-conta-corrente`, `ssa-12345`); outras SAs caem no fallback "Sem atividade nas últimas 24h".
 - IUConfia surge no resumo da SA no painel lateral (94) — encaixa no master context sem ser intrusivo.
+
+## 2026-05-13 — Re-alinhamento Home com `specs/01-home.md`
+
+**Mudanças**
+- Removida a seção "Saúde dos motores" (grid de 7 motores): não consta na spec atualizada, que descreve apenas 3 seções verticais (Hero / Atividade recente / Workflows em execução). Visão dos motores permanece em `04-control-planes-dashboard`.
+- Reordenação: a seção "Em execução agora" foi movida para o final como Seção 3 (a spec marca essa seção como "mais importante, real-time" e a coloca depois de Atividade recente).
+- Seção 2 ("Atividade recente") ganhou um header agregador com live dot + "atualizado há 4s" — atende a "Real-time indicator visível na seção 2" da spec.
+- Cada workflow em execução agora tem um ícone lucide (Rocket/Network/Database/Hammer) para reforçar "use ícones lucide-react para cada tipo de evento".
+- Rows de workflow viraram `<a href="/workflows/detail">` (eram `<div>`) para tornar explícito "Item clicável vai pro detalhe do workflow".
+- Adicionados empty states elegantes para cada uma das 3 seções (componente `EmptyState` interno) — atende ao requisito da spec mesmo que o mock atual nunca dispare a condição.
