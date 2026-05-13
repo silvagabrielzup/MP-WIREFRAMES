@@ -78,3 +78,4 @@ Use Tailwind puro (sem shadcn). Componentes base você cria à mão com Tailwind
 
 \- Conflito com tela já feita: marque `\[!]` em PROGRESS e pare.
 
+ 
