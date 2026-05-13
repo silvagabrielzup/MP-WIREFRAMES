@@ -2,97 +2,67 @@ import {
   Plus,
   ArrowRight,
   ShieldCheck,
-  Boxes,
   CheckCircle2,
   AlertTriangle,
-  XCircle,
   Clock3,
-  ExternalLink,
-  UserCircle2,
-  Inbox,
-  Rocket,
-  Hammer,
-  Database,
-  Network,
-  Activity,
+  Workflow as WorkflowIcon,
+  ListChecks,
+  Circle,
+  CalendarClock,
+  GitPullRequest,
 } from 'lucide-react'
 
-type Status = 'running' | 'awaiting' | 'success' | 'failure'
-
-type Workflow = {
-  name: string
-  sa: string
-  step: string
-  done: number
-  total: number
-  elapsed: string
-  user: { initials: string; color: string }
-  status: Status
-  icon: typeof Rocket
-}
-
-const activeWorkflows: Workflow[] = [
-  {
-    name: 'onboarding-vanilla-brownfield',
-    sa: 'ssa-pix-core',
-    step: 'deploy',
-    done: 3,
-    total: 5,
-    elapsed: '2m 13s',
-    user: { initials: 'LL', color: 'bg-accent/25 text-accent' },
-    status: 'running',
-    icon: Rocket,
-  },
-  {
-    name: 'rollout-canary',
-    sa: 'ssa-conta-corrente',
-    step: 'traffic-shift',
-    done: 2,
-    total: 4,
-    elapsed: '6m 41s',
-    user: { initials: 'MR', color: 'bg-info/20 text-info' },
-    status: 'running',
-    icon: Network,
-  },
-  {
-    name: 'migration-pix-to-pix2',
-    sa: 'ssa-pix-core',
-    step: 'await-approval',
-    done: 4,
-    total: 7,
-    elapsed: '14m 02s',
-    user: { initials: 'TS', color: 'bg-warning/20 text-warning' },
-    status: 'awaiting',
-    icon: Database,
-  },
-  {
-    name: 'build-and-test',
-    sa: 'ssa-12345',
-    step: 'sensors',
-    done: 1,
-    total: 3,
-    elapsed: '0m 47s',
-    user: { initials: 'AC', color: 'bg-success/20 text-success' },
-    status: 'running',
-    icon: Hammer,
-  },
-]
-
-const recentSAs: {
-  sa: string
-  owner: string
-  deploy: string
+const pendingApprovals: {
   workflow: string
-  status: 'success' | 'failure'
+  action: string
+  sa: string
+  requester: { initials: string; color: string }
+  ago: string
+  blocking: boolean
 }[] = [
-  { sa: 'ssa-pix-core', owner: 'squad-pix', deploy: '4m', workflow: 'onboarding-vanilla', status: 'success' },
-  { sa: 'ssa-conta-corrente', owner: 'squad-cc', deploy: '12m', workflow: 'rollout-canary', status: 'success' },
-  { sa: 'ssa-credito-prefixado', owner: 'squad-credito', deploy: '38m', workflow: 'build-and-test', status: 'success' },
-  { sa: 'ssa-12345', owner: 'squad-platform', deploy: '1h 02m', workflow: 'migration-postgres', status: 'success' },
-  { sa: 'ssa-investimentos', owner: 'squad-invest', deploy: '2h 18m', workflow: 'rollback', status: 'failure' },
+  {
+    workflow: 'onboarding-vanilla-brownfield',
+    action: 'Aprovar policy override · network egress',
+    sa: 'ssa-pix-core',
+    requester: { initials: 'LL', color: 'bg-accent/25 text-accent' },
+    ago: '4m',
+    blocking: true,
+  },
+  {
+    workflow: 'migration-pix-to-pix2',
+    action: 'Aprovar plano de backfill · 18M registros',
+    sa: 'ssa-pix-core',
+    requester: { initials: 'MR', color: 'bg-info/20 text-info' },
+    ago: '14m',
+    blocking: true,
+  },
+  {
+    workflow: 'rollout-canary',
+    action: 'Aprovar traffic-shift para 50%',
+    sa: 'ssa-conta-corrente',
+    requester: { initials: 'TS', color: 'bg-warning/20 text-warning' },
+    ago: '37m',
+    blocking: false,
+  },
+  {
+    workflow: 'onboarding-vanilla-brownfield',
+    action: 'Aprovar provisionamento Kaptain · EKS staging',
+    sa: 'ssa-credito-prefixado',
+    requester: { initials: 'AC', color: 'bg-success/20 text-success' },
+    ago: '1h 12m',
+    blocking: false,
+  },
+  {
+    workflow: 'rollback',
+    action: 'Aprovar restauração do snapshot pré-migração',
+    sa: 'ssa-investimentos',
+    requester: { initials: 'PV', color: 'bg-failure/20 text-failure' },
+    ago: '2h 41m',
+    blocking: true,
+  },
 ]
 
-const attention: {
+const appHubAlerts: {
   kind: 'approval' | 'failure' | 'policy'
   title: string
   detail: string
@@ -105,24 +75,45 @@ const attention: {
   { kind: 'policy', title: 'Nova violação de policy', detail: 'ssa-12345 · network egress fora da allowlist', ago: '5h' },
 ]
 
+type Priority = 'high' | 'medium' | 'low'
 
+const todos: {
+  title: string
+  detail: string
+  priority: Priority
+  due: string
+  icon: typeof GitPullRequest
+}[] = [
+  {
+    title: 'Revisar PR feat: shadow traffic',
+    detail: 'ssa-conta-corrente · 3 arquivos · agente Claude Code',
+    priority: 'high',
+    due: 'hoje',
+    icon: GitPullRequest,
+  },
+  {
+    title: 'Aprovar policy override Komply',
+    detail: 'migration-pix-to-pix2 · network egress · ssa-pix-core',
+    priority: 'high',
+    due: 'hoje',
+    icon: ShieldCheck,
+  },
+  {
+    title: 'Validar SLO de p99 pós-rollback',
+    detail: 'ssa-investimentos · janela de 24h após o rollback',
+    priority: 'medium',
+    due: 'amanhã',
+    icon: CalendarClock,
+  },
+]
 
-
-const statusDot: Record<Status, string> = {
-  running: 'bg-live',
-  awaiting: 'bg-warning',
-  success: 'bg-success',
-  failure: 'bg-failure',
+const priorityChip: Record<Priority, string> = {
+  high: 'border-failure/30 bg-failure/10 text-failure',
+  medium: 'border-warning/30 bg-warning/10 text-warning',
+  low: 'border-border bg-bg text-text-muted',
 }
 
-const statusLabel: Record<Status, string> = {
-  running: 'running',
-  awaiting: 'awaiting human',
-  success: 'success',
-  failure: 'failure',
-}
-
-function EmptyState({ icon: Icon, title, hint }: { icon: typeof Inbox; title: string; hint: string }) {
+function EmptyState({ icon: Icon, title, hint }: { icon: typeof CheckCircle2; title: string; hint: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
       <span className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-[#181A1F]">
@@ -131,6 +122,21 @@ function EmptyState({ icon: Icon, title, hint }: { icon: typeof Inbox; title: st
       <div className="text-[13px] font-medium text-text-secondary">{title}</div>
       <div className="max-w-[280px] text-[11.5px] text-text-muted">{hint}</div>
     </div>
+  )
+}
+
+function LiveBadge({ ago }: { ago: string }) {
+  return (
+    <>
+      <span className="flex items-center gap-1.5 rounded-full border border-live/30 bg-live/10 px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wide text-live">
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="absolute inline-flex h-full w-full animate-pulse-live rounded-full bg-live opacity-80" />
+          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-live" />
+        </span>
+        live
+      </span>
+      <span className="text-[12px] text-text-muted">atualizado há {ago}</span>
+    </>
   )
 }
 
@@ -154,37 +160,148 @@ export default function Home() {
         </button>
       </section>
 
-      {/* Section 2 — Atividade recente (2 colunas) */}
+      {/* Section 2 — Lista de tarefas */}
+      <section>
+        <div className="mb-3 flex items-center gap-2.5">
+          <h2 className="text-[15px] font-semibold tracking-tight">Lista de tarefas</h2>
+          <span className="text-[12px] text-text-muted">{todos.length} pessoais</span>
+        </div>
+
+        <div className="rounded-lg border border-border bg-surface">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <div className="flex items-center gap-2">
+              <ListChecks className="h-3.5 w-3.5 text-text-muted" />
+              <h3 className="text-[13.5px] font-semibold tracking-tight">Suas tarefas</h3>
+            </div>
+            <button className="text-[11.5px] text-text-secondary hover:text-text-primary">
+              ver todas
+            </button>
+          </div>
+          {todos.length === 0 ? (
+            <EmptyState
+              icon={CheckCircle2}
+              title="Nenhuma tarefa pendente"
+              hint="Quando alguém te marcar como reviewer ou aprovador, aparece aqui."
+            />
+          ) : (
+            <ul>
+              {todos.map((t, i) => {
+                const Icon = t.icon
+                return (
+                  <li
+                    key={i}
+                    className="group flex cursor-pointer items-start gap-3 border-b border-border px-4 py-3 last:border-b-0 hover:bg-[#181A1F]"
+                  >
+                    <button
+                      className="mt-0.5 flex h-4 w-4 flex-none items-center justify-center rounded border border-border bg-bg hover:border-accent"
+                      aria-label="marcar como concluído"
+                    >
+                      <Circle className="h-2.5 w-2.5 text-text-muted opacity-0 group-hover:opacity-100" />
+                    </button>
+                    <Icon className="mt-0.5 h-3.5 w-3.5 flex-none text-text-muted" />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[12.5px] text-text-primary">{t.title}</div>
+                      <div className="truncate text-[11.5px] text-text-muted">{t.detail}</div>
+                    </div>
+                    <div className="flex flex-none items-center gap-2">
+                      <span
+                        className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider ${priorityChip[t.priority]}`}
+                      >
+                        {t.priority}
+                      </span>
+                      <span className="font-mono text-[11px] text-text-muted">{t.due}</span>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+      </section>
+
+      {/* Section 3 — Importante atenção (2 colunas) */}
       <section>
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <h2 className="text-[15px] font-semibold tracking-tight">Atividade recente</h2>
-            <span className="flex items-center gap-1.5 rounded-full border border-live/30 bg-live/10 px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wide text-live">
-              <span className="relative flex h-1.5 w-1.5">
-                <span className="absolute inline-flex h-full w-full animate-pulse-live rounded-full bg-live opacity-80" />
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-live" />
-              </span>
-              live
-            </span>
-            <span className="text-[12px] text-text-muted">atualizado há 4s</span>
+            <h2 className="text-[15px] font-semibold tracking-tight">Importante atenção</h2>
+            <LiveBadge ago="4s" />
           </div>
         </div>
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          {/* Coluna esquerda — Precisa de atenção (card principal) */}
+          {/* Coluna esquerda — Fluxos agênticos pendentes aprovação */}
           <div className="rounded-lg border border-warning/40 bg-surface ring-1 ring-warning/15">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <div className="flex items-center gap-2">
-                <AlertTriangle className="h-3.5 w-3.5 text-warning" />
-                <h3 className="text-[13.5px] font-semibold tracking-tight">Precisa de atenção</h3>
+                <WorkflowIcon className="h-3.5 w-3.5 text-warning" />
+                <h3 className="text-[13.5px] font-semibold tracking-tight">
+                  Fluxos agênticos pendentes de aprovação
+                </h3>
               </div>
-              {attention.length > 0 && (
+              {pendingApprovals.length > 0 && (
                 <span className="rounded-full bg-warning/10 px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wide text-warning">
-                  {attention.length} itens
+                  {pendingApprovals.length} aguardando
                 </span>
               )}
             </div>
-            {attention.length === 0 ? (
+            {pendingApprovals.length === 0 ? (
+              <EmptyState
+                icon={CheckCircle2}
+                title="Nenhuma aprovação pendente"
+                hint="Quando um workflow agêntico precisar de input humano, ele aparece aqui."
+              />
+            ) : (
+              <ul>
+                {pendingApprovals.map((p) => (
+                  <li
+                    key={p.workflow + p.sa + p.ago}
+                    className="group flex cursor-pointer items-start gap-3 border-b border-border px-4 py-3 last:border-b-0 hover:bg-[#181A1F]"
+                  >
+                    <span className="mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-md bg-warning/15 text-warning">
+                      <Clock3 className="h-3.5 w-3.5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate font-mono text-[12.5px] text-text-primary">{p.workflow}</span>
+                        {p.blocking && (
+                          <span className="flex-none rounded border border-failure/30 bg-failure/10 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-failure">
+                            blocking
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-0.5 truncate text-[12px] text-text-secondary">{p.action}</div>
+                      <div className="mt-1 flex items-center gap-2 text-[11px] text-text-muted">
+                        <span className="font-mono">{p.sa}</span>
+                        <span>·</span>
+                        <span
+                          className={`flex h-4 w-4 items-center justify-center rounded-full text-[9.5px] font-medium ${p.requester.color}`}
+                        >
+                          {p.requester.initials}
+                        </span>
+                        <span className="font-mono">há {p.ago}</span>
+                      </div>
+                    </div>
+                    <ArrowRight className="mt-1 h-3.5 w-3.5 flex-none text-text-muted opacity-0 transition group-hover:opacity-100" />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Coluna direita — Alertas da Application Hub */}
+          <div className="rounded-lg border border-border bg-surface">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 text-warning" />
+                <h3 className="text-[13.5px] font-semibold tracking-tight">Alertas da Application Hub</h3>
+              </div>
+              {appHubAlerts.length > 0 && (
+                <span className="rounded-full bg-warning/10 px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wide text-warning">
+                  {appHubAlerts.length} itens
+                </span>
+              )}
+            </div>
+            {appHubAlerts.length === 0 ? (
               <EmptyState
                 icon={CheckCircle2}
                 title="Tudo sob controle"
@@ -192,7 +309,7 @@ export default function Home() {
               />
             ) : (
               <ul>
-                {attention.map((a, i) => {
+                {appHubAlerts.map((a, i) => {
                   const Icon =
                     a.kind === 'approval' ? Clock3 : a.kind === 'failure' ? AlertTriangle : ShieldCheck
                   const color =
@@ -221,161 +338,6 @@ export default function Home() {
               </ul>
             )}
           </div>
-
-          {/* Coluna direita — SAs ON-PLAT recentemente atualizadas */}
-          <div className="rounded-lg border border-border bg-surface">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <div className="flex items-center gap-2">
-                <Activity className="h-3.5 w-3.5 text-text-muted" />
-                <h3 className="text-[13.5px] font-semibold tracking-tight">
-                  SAs ON-PLAT recentemente atualizadas
-                </h3>
-              </div>
-              <a className="text-[11.5px] text-text-secondary hover:text-text-primary" href="/assets">
-                ver catálogo
-              </a>
-            </div>
-            {recentSAs.length === 0 ? (
-              <EmptyState
-                icon={Boxes}
-                title="Nenhuma SA atualizada recentemente"
-                hint="Quando uma SA ON-PLAT executar um workflow, ela aparecerá aqui."
-              />
-            ) : (
-              <ul>
-                {recentSAs.map((s) => (
-                  <li
-                    key={s.sa}
-                    className="group grid cursor-pointer grid-cols-[1.4fr_1fr_0.9fr_0.5fr] items-center gap-3 border-b border-border px-4 py-2.5 last:border-b-0 hover:bg-[#181A1F]"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Boxes className="h-3.5 w-3.5 text-text-muted" />
-                      <span className="font-mono text-[12.5px] text-text-primary">{s.sa}</span>
-                    </div>
-                    <div className="text-[12px] text-text-secondary">
-                      <UserCircle2 className="mr-1 inline h-3.5 w-3.5 -translate-y-px text-text-muted" />
-                      {s.owner}
-                    </div>
-                    <div className="truncate text-[11.5px] text-text-muted">{s.workflow}</div>
-                    <div className="flex items-center justify-end gap-1.5 text-[11.5px]">
-                      {s.status === 'success' ? (
-                        <CheckCircle2 className="h-3.5 w-3.5 text-success" />
-                      ) : (
-                        <XCircle className="h-3.5 w-3.5 text-failure" />
-                      )}
-                      <span className="font-mono text-text-secondary">{s.deploy}</span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* Section 3 — Workflows em andamento (real-time) */}
-      <section>
-        <div className="mb-3 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <h2 className="text-[15px] font-semibold tracking-tight">Em execução agora</h2>
-            <span className="flex items-center gap-1.5 rounded-full border border-live/30 bg-live/10 px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wide text-live">
-              <span className="relative flex h-1.5 w-1.5">
-                <span className="absolute inline-flex h-full w-full animate-pulse-live rounded-full bg-live opacity-80" />
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-live" />
-              </span>
-              live
-            </span>
-            <span className="text-[12px] text-text-muted">atualizado há 2s</span>
-          </div>
-          <a
-            className="flex items-center gap-1 text-[12px] text-text-secondary hover:text-text-primary"
-            href="/workflows"
-          >
-            ver todos <ArrowRight className="h-3.5 w-3.5" />
-          </a>
-        </div>
-
-        <div className="overflow-hidden rounded-lg border border-border bg-surface">
-          {activeWorkflows.length === 0 ? (
-            <EmptyState
-              icon={Inbox}
-              title="Nenhum workflow em execução"
-              hint="Quando alguém disparar um workflow ele aparece aqui em tempo real."
-            />
-          ) : (
-            <>
-              <div className="grid grid-cols-[1.6fr_1fr_1.2fr_0.8fr_0.8fr_0.6fr] border-b border-border bg-[#101115] px-4 py-2.5 text-[10.5px] font-medium uppercase tracking-wider text-text-muted">
-                <div>Workflow</div>
-                <div>SA</div>
-                <div>Step atual</div>
-                <div>Decorrido</div>
-                <div>Status</div>
-                <div className="text-right">Por</div>
-              </div>
-              {activeWorkflows.map((w) => {
-                const progress = (w.done / w.total) * 100
-                const Icon = w.icon
-                return (
-                  <a
-                    key={w.name + w.sa}
-                    href="/workflows/detail"
-                    className="group grid cursor-pointer grid-cols-[1.6fr_1fr_1.2fr_0.8fr_0.8fr_0.6fr] items-center border-b border-border px-4 py-3 text-[13px] last:border-b-0 hover:bg-[#181A1F]"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <span
-                        className={`h-1.5 w-1.5 rounded-full ${statusDot[w.status]} ${
-                          w.status === 'running' ? 'animate-pulse-live' : ''
-                        }`}
-                      />
-                      <Icon className="h-3.5 w-3.5 text-text-muted" />
-                      <span className="font-medium text-text-primary">{w.name}</span>
-                    </div>
-                    <div className="font-mono text-[12px] text-text-secondary">{w.sa}</div>
-                    <div>
-                      <div className="flex items-center gap-2 text-[12.5px] text-text-secondary">
-                        <span className="text-text-primary">{w.step}</span>
-                        <span className="text-text-muted">
-                          ({w.done}/{w.total})
-                        </span>
-                      </div>
-                      <div className="mt-1.5 h-1 w-full max-w-[180px] overflow-hidden rounded-full bg-[#22232A]">
-                        <div
-                          className={`h-full rounded-full ${
-                            w.status === 'awaiting' ? 'bg-warning' : 'bg-live'
-                          }`}
-                          style={{ width: `${progress}%` }}
-                        />
-                      </div>
-                    </div>
-                    <div className="font-mono text-[12px] text-text-secondary">{w.elapsed}</div>
-                    <div>
-                      <span
-                        className={`inline-flex items-center gap-1.5 rounded border px-2 py-0.5 text-[11px] ${
-                          w.status === 'running'
-                            ? 'border-live/30 bg-live/10 text-live'
-                            : w.status === 'awaiting'
-                            ? 'border-warning/30 bg-warning/10 text-warning'
-                            : w.status === 'success'
-                            ? 'border-success/30 bg-success/10 text-success'
-                            : 'border-failure/30 bg-failure/10 text-failure'
-                        }`}
-                      >
-                        {statusLabel[w.status]}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-end gap-2">
-                      <span
-                        className={`flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-medium ${w.user.color}`}
-                      >
-                        {w.user.initials}
-                      </span>
-                      <ExternalLink className="h-3.5 w-3.5 text-text-muted opacity-0 transition group-hover:opacity-100" />
-                    </div>
-                  </a>
-                )
-              })}
-            </>
-          )}
         </div>
       </section>
     </div>

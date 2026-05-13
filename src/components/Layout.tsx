@@ -1,26 +1,16 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   Activity,
-  Server,
   Boxes,
   Search,
   Bell,
   ChevronDown,
-  Clock,
   Sparkles,
 } from 'lucide-react'
 
 const navItems = [
   { to: '/workflows', label: 'Workflow Tracker', icon: Activity },
-  { to: '/control-planes', label: 'Control Planes', icon: Server },
   { to: '/assets', label: 'Assets Catalog', icon: Boxes },
-]
-
-const recents = [
-  { label: 'ssa-pix-core', kind: 'SA' },
-  { label: 'onboarding-vanilla-brownfield', kind: 'Workflow' },
-  { label: 'Kaptain', kind: 'Engine' },
-  { label: 'ssa-conta-corrente', kind: 'SA' },
 ]
 
 export function Layout() {
@@ -71,21 +61,6 @@ export function Layout() {
             </NavLink>
           ))}
         </nav>
-
-        <div className="mt-6 px-5">
-          <div className="mb-2 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-text-muted">
-            <Clock className="h-3 w-3" />
-            Recentes
-          </div>
-          <ul className="space-y-1">
-            {recents.map((r) => (
-              <li key={r.label} className="group cursor-pointer truncate rounded px-2 py-1.5 text-[12px] text-text-secondary hover:bg-surface hover:text-text-primary">
-                <span className="mr-1.5 text-[10px] uppercase text-text-muted group-hover:text-accent">{r.kind}</span>
-                {r.label}
-              </li>
-            ))}
-          </ul>
-        </div>
 
         <div className="mt-auto border-t border-border px-4 py-3 text-[11px] text-text-muted">
           <div className="flex items-center justify-between">

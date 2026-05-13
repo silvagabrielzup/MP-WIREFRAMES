@@ -36,7 +36,7 @@ As of 2026-05-12 all seven screens (01–07) are `[x]`. Further iterations shoul
 ## Architecture
 
 - `src/App.tsx` — `BrowserRouter` with all routes nested under one `<Layout />`. Some screens have two route aliases (e.g. `/assets` and `/catalog`).
-- `src/components/Layout.tsx` — the only shared component. Fixed 240px sidebar (logo, nav, "Recentes", live dot footer) + sticky topbar (global search with ⌘K, env selector, bell, avatar) + `<Outlet />` in a `max-w-[1400px]` main. Screens render their own page chrome inside this.
+- `src/components/Layout.tsx` — the only shared component. Fixed 240px sidebar (logo, nav, live dot footer) + sticky topbar (global search with ⌘K, env selector, bell, avatar) + `<Outlet />` in a `max-w-[1400px]` main. Screens render their own page chrome inside this.
 - `src/screens/NN-Name.tsx` — self-contained. Mock data, SVG charts (sparklines, donuts, dependency graphs) hand-rolled inline, no chart libs. Density is the point — don't simplify.
 
 When adding/editing a screen, read `01-Home.tsx` first; it's the canonical reference for spacing, type scale, badge/chip patterns, and color usage.

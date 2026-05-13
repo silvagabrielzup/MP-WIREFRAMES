@@ -20,7 +20,7 @@ A missão do Management Plane: habilitar confiança progressiva no harness agên
 
 
 
-\# 3 produtos integrados (mesma navegação, design system unificado)
+\# 2 produtos integrados (mesma navegação, design system unificado)
 
 
 
@@ -28,11 +28,7 @@ A missão do Management Plane: habilitar confiança progressiva no harness agên
 
 
 
-2\. \*\*Control Planes Management\*\* — painel operacional dos 7 motores. Pergunta-chave: "a plataforma está saudável? o que cada motor está fazendo?"
-
-
-
-3\. \*\*Assets Catalog\*\* — inventário descobrível das aplicações, agentes, APIs. Pergunta-chave: "o que existe? de quem é? em que estado está?"
+2\. \*\*Assets Catalog\*\* — inventário descobrível das aplicações, agentes, APIs. Pergunta-chave: "o que existe? de quem é? em que estado está?"
 
 
 
@@ -108,7 +104,7 @@ Protótipo 0 = baixa fidelidade funcional. Precisa: hierarquia visual clara, den
 
 
 
-\- Sidebar esquerda fixa (240px): logo StackSpot, navegação (Workflow Tracker, Control Planes, Assets Catalog), seção "Recentes"
+\- Sidebar esquerda fixa (240px): logo StackSpot, navegação (Workflow Tracker, Assets Catalog)
 
 \- Topbar: search global, seletor de ambiente (dev/hom/prod), notificações, avatar
 

@@ -1,13 +1,10 @@
 Gere a tela inicial do Management Plane (rota: /).
 
-
-
 Layout:
 
 \- Sidebar + Topbar conforme contexto mestre
 
-\- Conteúdo principal dividido em 4 seções verticais:
-
+\- Conteúdo principal dividido em 3 seções verticais:
 
 
 \## Seção 1 — Hero compacto (não card)
@@ -19,51 +16,36 @@ Layout:
 \- Botão primário: "+ Onboardar nova SA"
 
 
-\## Seção 2 — Atividade recente (2 colunas)
+\## Seção 2 — Lista de tarefas (1 coluna)
 
-\- Coluna esquerda: "SAs ON-PLAT recentemente atualizadas"
+\- Título: "Suas tarefas"
 
-&#x20; - Lista de 5 SAs com último deploy, owner, último workflow
+\- Lista com 3 itens de todo-list, cada um com:
 
-\- Coluna direita: "Precisa de atenção"
+&#x20; - Checkbox para marcar como concluído
+
+&#x20; - Ícone do tipo de tarefa (PR, aprovação Komply, validação de SLO, etc.)
+
+&#x20; - Título + detalhe (SA / contexto)
+
+&#x20; - Chip de prioridade (high / medium / low)
+
+&#x20; - Due date relativo ("hoje", "amanhã")
+
+
+\## Seção 3 — Importante atenção (2 colunas)
+
+\- Coluna esquerda: "Fluxos agenticos pendentes aprovacao"
+
+&#x20; - Lista de 5 itens com nome do workflow, nome da ação que necessidade de aprovação
+
+\- Coluna direita: "Alertas da Aplication Hub"
 
 &#x20; - Aprovações pendentes (Komply)
 
 &#x20; - Workflows com falha últimas 24h
 
 &#x20; - Violações de policy novas
-
-\## Seção 3 — Histórias do UIClick (2 colunas)
-
-\- Coluna esquerda: ""
-
-&#x20; - Lista de 5 Histórias
-
-\- Coluna direita: "Últimas histórias"
-
-&#x20; - Criação de dashboard
-
-\## Seção 4 — Workflows em andamento (mais importante, real-time)
-
-\- Título: "Em execução agora"
-
-\- Indicador live (dot pulsante ciano)
-
-\- Lista compacta de 3-5 workflows ativos, cada um com:
-
-&#x20; - Nome do workflow (ex: "onboarding-vanilla-brownfield")
-
-&#x20; - SA (ex: "ssa-pix-core")
-
-&#x20; - Step atual com progresso (ex: "deploy (3/5)")
-
-&#x20; - Tempo decorrido (ex: "2m 13s")
-
-&#x20; - Quem disparou (avatar)
-
-&#x20; - Status badge
-
-\- Item clicável vai pro detalhe do workflow
 
 
 Estilo:
@@ -74,7 +56,7 @@ Estilo:
 
 \- Estado vazio elegante para cada seção quando não há dados
 
-\- Real-time indicator visível na seção 2
+\- Real-time indicator visível na seção 3
 
 \- Dados mockados realistas
 
