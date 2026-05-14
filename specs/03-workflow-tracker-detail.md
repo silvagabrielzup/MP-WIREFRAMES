@@ -1,10 +1,6 @@
 Gere a tela de detalhe de um workflow (rota: /workflows/\[id]).
 
-
-
 Esta é a tela mais importante do produto. Foco em legibilidade da cadeia causal.
-
-
 
 Layout:
 
@@ -22,8 +18,6 @@ Layout:
 
 &#x20; - Em running: indicador "live · updated 1s ago"
 
-
-
 \- Tabs principais:
 
 &#x20; - \*\*Timeline\*\* (default) — fluxo dos steps
@@ -38,19 +32,13 @@ Layout:
 
 &#x20; - \*\*Custo\*\* — tokens, R$, latência por step
 
-
-
 \## Tab Timeline (mais detalhada)
-
-
 
 \- Layout em 2 colunas:
 
 &#x20; - Coluna esquerda (60%): timeline vertical
 
 &#x20; - Coluna direita (40%): detalhe do step selecionado
-
-
 
 \### Timeline vertical (coluna esquerda)
 
@@ -86,8 +74,6 @@ Layout:
 
 \- Click no step seleciona, mostra detalhe à direita
 
-
-
 \### Detalhe do step (coluna direita, sticky)
 
 \- Header do step
@@ -103,8 +89,6 @@ Layout:
 &#x20; - \*\*Decisão do agente\*\*: rationale, alternatives\_considered
 
 \- Botão "Ver raw trace" (abre modal com JSON estruturado)
-
-
 
 Estilo:
 

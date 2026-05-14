@@ -1,7 +1,5 @@
 Gere a tela de lista do Workflow Tracker (rota: /workflows).
 
-
-
 Layout:
 
 \- Sidebar + Topbar conforme contexto mestre

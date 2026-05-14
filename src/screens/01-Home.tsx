@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   Plus,
   ArrowRight,
@@ -7,7 +8,7 @@ import {
   Clock3,
   Workflow as WorkflowIcon,
   ListChecks,
-  Circle,
+  Check,
   CalendarClock,
   GitPullRequest,
 } from 'lucide-react'
@@ -107,12 +108,6 @@ const todos: {
   },
 ]
 
-const priorityChip: Record<Priority, string> = {
-  high: 'border-failure/30 bg-failure/10 text-failure',
-  medium: 'border-warning/30 bg-warning/10 text-warning',
-  low: 'border-border bg-bg text-text-muted',
-}
-
 function EmptyState({ icon: Icon, title, hint }: { icon: typeof CheckCircle2; title: string; hint: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
@@ -141,6 +136,17 @@ function LiveBadge({ ago }: { ago: string }) {
 }
 
 export default function Home() {
+  const [doneTodos, setDoneTodos] = useState<Set<number>>(new Set())
+
+  const toggleTodo = (i: number) => {
+    setDoneTodos((prev) => {
+      const next = new Set(prev)
+      if (next.has(i)) next.delete(i)
+      else next.add(i)
+      return next
+    })
+  }
+
   return (
     <div className="space-y-10">
       {/* Section 1 — Hero compacto */}
@@ -187,28 +193,44 @@ export default function Home() {
             <ul>
               {todos.map((t, i) => {
                 const Icon = t.icon
+                const done = doneTodos.has(i)
                 return (
                   <li
                     key={i}
-                    className="group flex cursor-pointer items-start gap-3 border-b border-border px-4 py-3 last:border-b-0 hover:bg-[#181A1F]"
+                    className={`group flex items-start gap-3 border-b border-border px-4 py-3 last:border-b-0 hover:bg-[#181A1F] ${
+                      done ? 'opacity-50' : ''
+                    }`}
                   >
                     <button
-                      className="mt-0.5 flex h-4 w-4 flex-none items-center justify-center rounded border border-border bg-bg hover:border-accent"
-                      aria-label="marcar como concluído"
+                      type="button"
+                      role="checkbox"
+                      aria-checked={done}
+                      onClick={() => toggleTodo(i)}
+                      className={`mt-0.5 flex h-4 w-4 flex-none items-center justify-center rounded border transition ${
+                        done
+                          ? 'border-accent bg-accent text-black'
+                          : 'border-border bg-bg hover:border-accent'
+                      }`}
+                      aria-label={done ? 'desmarcar tarefa' : 'marcar como concluído'}
                     >
-                      <Circle className="h-2.5 w-2.5 text-text-muted opacity-0 group-hover:opacity-100" />
+                      <Check
+                        className={`h-2.5 w-2.5 ${
+                          done ? 'opacity-100' : 'opacity-0 group-hover:opacity-50 text-text-muted'
+                        }`}
+                      />
                     </button>
                     <Icon className="mt-0.5 h-3.5 w-3.5 flex-none text-text-muted" />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-[12.5px] text-text-primary">{t.title}</div>
+                      <div
+                        className={`truncate text-[12.5px] text-text-primary ${
+                          done ? 'line-through text-text-muted' : ''
+                        }`}
+                      >
+                        {t.title}
+                      </div>
                       <div className="truncate text-[11.5px] text-text-muted">{t.detail}</div>
                     </div>
                     <div className="flex flex-none items-center gap-2">
-                      <span
-                        className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider ${priorityChip[t.priority]}`}
-                      >
-                        {t.priority}
-                      </span>
                       <span className="font-mono text-[11px] text-text-muted">{t.due}</span>
                     </div>
                   </li>
