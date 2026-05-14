@@ -1,11 +1,15 @@
-# Progress
+[x] - No AssetsCatalog.tsx , para a tab de Workflows , criei um arquivo 'database.ts' para não trazer dados mockados no código , leve todo o objeto de Migração Vanilla para um arquivo , **não perca nenhum dado que já esteja na tela** migre todos os dados do workflow para o database.ts
 
+[x] - Com o arquivo de database.ts populado , faça todo a tipagem para conseguirmos usar o Migração Vanilla 
 
+[x] - Agora liste o workflows do database.ts 
 
-- [x] 01-home — Home / Landing (2026-05-12T00:00:00Z) — shell de router + Layout (sidebar/topbar) + Home com hero, workflows live, grid de 7 motores e 2 colunas de atividade
+[x] - Crie um Context com nome de 'WorkflowsProvider' , a responsabilidade desse context vai controlar todos os steps de um Workflow , então deveremos ter metodos para adicionar um workflow , listar todos os workflows , avançar etapas no workflow e avançar status
 
-- [x] 03-workflow-tracker-detail — Workflow Tracker: Detalhe (2026-05-12T00:00:00Z) — header com status live + ações, progress bar dividida pelos 4 verbos, tabs (Timeline/Tools/Sensores/Auditoria/Replay/Custo), timeline em 2 colunas com 13 steps agrupados por Build/Deploy/Migration/Rollout, painel direito sticky com Input/Output/Sensores/Decisão do agente colapsáveis
+[x] - Na home.tsx agora a listagem do card de próximos ele devem ser listados atráves do WorkflowsProviders.tsx , trazer o último workflow selecionado 
 
-- [x] 06-assets-catalog — Assets Catalog: Lista de SAs (2026-05-12T00:00:00Z) — breadcrumb + título "Catálogo" com search e CTA "Onboardar SA", 12 chips de tipo de asset com contagens (SAs default), filter bar com toggle ON-PLAT, multi-selects Owner/Tribo, range slider IUConfia, tag chips e toggle grid/tabela; grid 3-col de 22 SAs com card denso (nome+ON-PLAT badge, owner+tribo, donut SVG do IUConfia com delta, 3 mini-stats workflows 7d/deploys 7d/último deploy com status dot, tags) e view alternativa em tabela densa; sidebar direita sticky com Filtros aplicados (chips removíveis), contagem progressiva, distribuição de IUConfia em 3 faixas e atividade recente do catálogo; empty state elegante quando filtros zeram resultados
+[x] - No arquivo de WorkflowTrackerList , remova todos os mock do código
 
-- [x] 07-sa-detail — Assets Catalog: Detalhe de SA (2026-05-12T00:00:00Z) — breadcrumb + header com ícone, título mono "ssa-pix-core", badges ON-PLAT/healthy, descrição, owner+squad+tribo, repo+branch, 6 tags e ações (Disparar workflow/Edit ownership/...); linha sticky de scorecards com IUConfia donut grande 92 + 3 mini-donuts (Segurança 95/Qualidade 89/Performance 93) + Cobertura 87% (donut info) + Débito 12.4h, todos com delta vs mês ant.; 6 tabs (Overview/Workflows recentes 31/Infra 10/APIs 4/Dependências 13/Histórico); Overview em 2 colunas: esquerda com "Sobre esta SA" (10 campos), gráfico de barras 7d (deploys/workflows/incidentes) + 3 stats e card "Última execução de workflow" running com progress segmentado por verbo; direita com "Infra rápida" agrupada (EKS×3/DynamoDB×2/SQS×1/APIs×4) e aprovação Komply pendente; mapa de dependências preview com nó central + 4 upstream + 4 downstream e linhas SVG; tabs auxiliares com tabela densa de 8 workflows recentes, tabela de 10 recursos de infra com filtros por status, tabela de 7 APIs com método/SLA/p99/RPS/sensores, mapa+tabela de 10 dependências e timeline de histórico com 11 eventos coloridos por tipo
+[x] - No WorkflowTrackerList.tsx , deve ser listado através do WorkflowProvider.tsx 
+
+[ ] - No WorkflowTrackerDetail ,popule essa tela com os dados do workflow selecionado, busque no database.ts , os steps do diagrama use como refer

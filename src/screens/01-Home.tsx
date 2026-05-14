@@ -1,24 +1,32 @@
 import { Link } from 'react-router-dom'
 import {
-  Plus,
   ArrowRight,
   ShieldCheck,
   CheckCircle2,
   AlertTriangle,
   Clock3,
   Workflow as WorkflowIcon,
-  Terminal,
-  GitBranch,
-  Settings,
-  Play,
-  Rocket,
-  Activity,
   Loader2,
   MoreHorizontal,
   Check,
   Sparkles,
-  LayoutGrid,
+  Boxes,
 } from 'lucide-react'
+import { useWorkflows } from '../contexts/WorkflowsProvider'
+import { workflows as workflowTemplates } from '../data/database'
+
+type StepStatus = 'done' | 'in-progress' | 'not-started'
+
+type OnboardingStep = {
+  id: number
+  stepId: string
+  title: string
+  description: string
+  cta?: string
+  estimate?: string
+  status: StepStatus
+  badge?: string
+}
 
 const pendingApprovals: {
   workflow: string
@@ -27,216 +35,24 @@ const pendingApprovals: {
   requester: { initials: string; color: string }
   ago: string
   blocking: boolean
-}[] = [
-  {
-    workflow: 'onboarding-vanilla-brownfield',
-    action: 'Aprovar policy override · network egress',
-    sa: 'ssa-pix-core',
-    requester: { initials: 'LL', color: 'bg-accent/25 text-accent' },
-    ago: '4m',
-    blocking: true,
-  },
-  {
-    workflow: 'migration-pix-to-pix2',
-    action: 'Aprovar plano de backfill · 18M registros',
-    sa: 'ssa-pix-core',
-    requester: { initials: 'MR', color: 'bg-info/20 text-info' },
-    ago: '14m',
-    blocking: true,
-  },
-  {
-    workflow: 'rollout-canary',
-    action: 'Aprovar traffic-shift para 50%',
-    sa: 'ssa-conta-corrente',
-    requester: { initials: 'TS', color: 'bg-warning/20 text-warning' },
-    ago: '37m',
-    blocking: false,
-  },
-  {
-    workflow: 'onboarding-vanilla-brownfield',
-    action: 'Aprovar provisionamento Kaptain · EKS staging',
-    sa: 'ssa-credito-prefixado',
-    requester: { initials: 'AC', color: 'bg-success/20 text-success' },
-    ago: '1h 12m',
-    blocking: false,
-  },
-  {
-    workflow: 'rollback',
-    action: 'Aprovar restauração do snapshot pré-migração',
-    sa: 'ssa-investimentos',
-    requester: { initials: 'PV', color: 'bg-failure/20 text-failure' },
-    ago: '2h 41m',
-    blocking: true,
-  },
-]
+}[] = []
 
 const appHubAlerts: {
   kind: 'approval' | 'failure' | 'policy'
   title: string
   detail: string
   ago: string
-}[] = [
-  { kind: 'approval', title: 'Aprovação Komply pendente', detail: 'migration-pix-to-pix2 · ssa-pix-core', ago: '14m' },
-  { kind: 'approval', title: 'PR aguardando tech lead', detail: 'feat: shadow traffic · ssa-conta-corrente', ago: '37m' },
-  { kind: 'failure', title: 'Workflow falhou', detail: 'rollback · ssa-investimentos · Pantheon queue overflow', ago: '2h' },
-  { kind: 'failure', title: 'Sensor security FAIL', detail: 'ssa-credito-prefixado · CVE-2025-3148 em dependência', ago: '3h' },
-  { kind: 'policy', title: 'Nova violação de policy', detail: 'ssa-12345 · network egress fora da allowlist', ago: '5h' },
-]
+}[] = []
 
-type StepStatus = 'done' | 'in-progress' | 'not-started'
-
-type OnboardingStep = {
-  id: number
+function EmptyState({
+  icon: Icon,
+  title,
+  hint,
+}: {
+  icon: typeof CheckCircle2
   title: string
-  description: string
-  icon: typeof Terminal
-  cta: string
-  estimate: string
-  status: StepStatus
-  badge?: string
-}
-
-const onboardingSteps: OnboardingStep[] = [
-  {
-    id: 1,
-    title: 'Instalar CLI do StackSpot',
-    description: 'Binário oficial + autenticação inicial com SSO Itaú.',
-    icon: Terminal,
-    cta: '/cli/install',
-    estimate: '~2min',
-    status: 'done',
-    badge: 'CLI v1.4.2 instalado',
-  },
-  {
-    id: 2,
-    title: 'Permissionar acesso ao Itaú Cloud',
-    description: 'Solicitar role e aguardar aprovação automatizada.',
-    icon: ShieldCheck,
-    cta: '/access/request',
-    estimate: '~5min',
-    status: 'done',
-    badge: 'role granted',
-  },
-  {
-    id: 3,
-    title: 'Selecionar repos pra migração',
-    description: 'Escolher quais repositórios entram na primeira leva.',
-    icon: GitBranch,
-    cta: '/migration/repo-picker',
-    estimate: '~3min',
-    status: 'done',
-    badge: '2 repos',
-  },
-  {
-    id: 4,
-    title: 'Configurar workflow de onboarding',
-    description: 'Parametrizar verbos da Operação Vanilla pro repo selecionado.',
-    icon: Settings,
-    cta: '/workflows/new',
-    estimate: '~8min',
-    status: 'in-progress',
-    badge: '3/5 campos preenchidos',
-  },
-  {
-    id: 5,
-    title: 'Disparar primeira execução',
-    description: 'Rodar onboarding-vanilla-brownfield em dev pela primeira vez.',
-    icon: Play,
-    cta: '/workflows',
-    estimate: '~1min',
-    status: 'not-started',
-  },
-  {
-    id: 6,
-    title: 'Validar resultado em dev',
-    description: 'Conferir saúde do workflow, logs e checks de Komply.',
-    icon: CheckCircle2,
-    cta: '/workflows/wf-7a2b1c',
-    estimate: '~10min',
-    status: 'not-started',
-  },
-  {
-    id: 7,
-    title: 'Promover pra homologação',
-    description: 'Disparar rollout canário com gate humano em 50%.',
-    icon: Rocket,
-    cta: '/applications/ssa-pix-core',
-    estimate: '~12min',
-    status: 'not-started',
-  },
-  {
-    id: 8,
-    title: 'Configurar observabilidade',
-    description: 'Linkar dashboards Datadog e monitores p99 / erro %.',
-    icon: Activity,
-    cta: '/applications/ssa-pix-core?tab=obs',
-    estimate: '~6min',
-    status: 'not-started',
-  },
-]
-
-const appHealth: {
-  sa: string
-  title: string
-  level: 'healthy' | 'warn' | 'fail'
-  metric: string
-  detail: string
-}[] = [
-  {
-    sa: 'ssa-pix-core',
-    title: 'ssa-pix-core',
-    level: 'warn',
-    metric: 'p99 acima do baseline',
-    detail: 'pico de 412ms · auto-mitigação em curso',
-  },
-  {
-    sa: 'ssa-conta-corrente',
-    title: 'ssa-conta-corrente',
-    level: 'healthy',
-    metric: 'uptime 99.99% · 11 deploys 7d',
-    detail: 'rollouts limpos, sem regressões',
-  },
-  {
-    sa: 'ssa-investimentos',
-    title: 'ssa-investimentos',
-    level: 'fail',
-    metric: 'rollback em curso',
-    detail: 'Pantheon queue overflow · 24min',
-  },
-  {
-    sa: 'ssa-credito-prefixado',
-    title: 'ssa-credito-prefixado',
-    level: 'healthy',
-    metric: 'uptime 99.97% · 8 deploys 7d',
-    detail: 'sensores ok · 0 violações 24h',
-  },
-]
-
-const healthMeta: Record<
-  (typeof appHealth)[number]['level'],
-  { label: string; pill: string; dot: string; ring: string }
-> = {
-  healthy: {
-    label: 'healthy',
-    pill: 'border-success/30 bg-success/10 text-success',
-    dot: 'bg-success',
-    ring: 'border-border',
-  },
-  warn: {
-    label: 'warn',
-    pill: 'border-warning/30 bg-warning/10 text-warning',
-    dot: 'bg-warning',
-    ring: 'border-warning/40',
-  },
-  fail: {
-    label: 'fail',
-    pill: 'border-failure/30 bg-failure/10 text-failure',
-    dot: 'bg-failure',
-    ring: 'border-failure/40 ring-1 ring-failure/15',
-  },
-}
-
-function EmptyState({ icon: Icon, title, hint }: { icon: typeof CheckCircle2; title: string; hint: string }) {
+  hint: string
+}) {
   return (
     <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
       <span className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-[#181A1F]">
@@ -281,17 +97,23 @@ function StepCheckbox({ status }: { status: StepStatus }) {
   return <span className="h-6 w-6 flex-none rounded-full border border-border bg-bg" />
 }
 
-function OnboardingStepRow({ step }: { step: OnboardingStep }) {
-  const Icon = step.icon
+function OnboardingStepRow({
+  step,
+  attenuated,
+}: {
+  step: OnboardingStep
+  attenuated: boolean
+}) {
   const isDone = step.status === 'done'
   const isInProgress = step.status === 'in-progress'
 
   if (isDone) {
     return (
-      <li className="flex items-center gap-3 border-b border-border px-4 py-2.5 last:border-b-0 opacity-60">
+      <li className="flex items-center gap-3 border-b border-border px-4 py-2.5 opacity-60 last:border-b-0">
         <StepCheckbox status="done" />
-        <Icon className="h-3.5 w-3.5 flex-none text-text-muted" />
-        <span className="flex-1 truncate text-[12.5px] text-text-muted line-through">{step.title}</span>
+        <span className="flex-1 truncate text-[12.5px] text-text-muted line-through">
+          {step.title}
+        </span>
         {step.badge && (
           <span className="font-mono text-[10.5px] text-text-muted">{step.badge}</span>
         )}
@@ -302,13 +124,10 @@ function OnboardingStepRow({ step }: { step: OnboardingStep }) {
   return (
     <li
       className={`flex items-start gap-3 border-b border-border px-4 py-3 last:border-b-0 hover:bg-[#181A1F] ${
-        isInProgress ? 'bg-accent/5' : ''
-      } ${!isInProgress && step.id > 4 ? 'opacity-80' : ''}`}
+        isInProgress ? 'border-l-2 border-l-accent bg-accent/5' : ''
+      } ${attenuated ? 'opacity-80' : ''}`}
     >
       <StepCheckbox status={step.status} />
-      <span className="mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-md bg-[#181A1F] text-text-secondary">
-        <Icon className="h-3.5 w-3.5" />
-      </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="truncate text-[12.5px] font-medium text-text-primary">{step.title}</span>
@@ -326,16 +145,21 @@ function OnboardingStepRow({ step }: { step: OnboardingStep }) {
         )}
       </div>
       <div className="flex flex-none items-center gap-3">
-        <span className="font-mono text-[11px] text-text-muted">{step.estimate}</span>
-        <Link
-          to={step.cta}
-          className="inline-flex items-center gap-1 text-[11.5px] text-text-secondary hover:text-text-primary"
-        >
-          Abrir
-          <ArrowRight className="h-3 w-3" />
-        </Link>
+        {step.estimate && (
+          <span className="font-mono text-[11px] text-text-muted">{step.estimate}</span>
+        )}
+        {step.cta && (
+          <Link
+            to={step.cta}
+            className="inline-flex items-center gap-1 text-[11.5px] text-text-secondary hover:text-text-primary"
+          >
+            Abrir
+            <ArrowRight className="h-3 w-3" />
+          </Link>
+        )}
         <button
           aria-label="opções"
+          title="dispensar · marcar como feito · lembrar depois"
           className="flex h-6 w-6 items-center justify-center rounded text-text-muted hover:bg-bg hover:text-text-primary"
         >
           <MoreHorizontal className="h-3.5 w-3.5" />
@@ -345,20 +169,68 @@ function OnboardingStepRow({ step }: { step: OnboardingStep }) {
   )
 }
 
-function OnboardingCard() {
-  const total = onboardingSteps.length
-  const doneCount = onboardingSteps.filter((s) => s.status === 'done').length
+function OnboardingPlaceholder() {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 px-6 py-14 text-center">
+      <span className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-[#181A1F]">
+        <Boxes className="h-5 w-5 text-text-muted" />
+      </span>
+      <h3 className="text-[15px] font-semibold tracking-tight text-text-primary">
+        Nada para fazer agora
+      </h3>
+      <p className="max-w-[420px] text-[12.5px] text-text-secondary">
+        Você ainda não tem uma jornada de onboarding ativa. Escolha um workflow no Assets Catalog
+        para que os próximos passos apareçam aqui.
+      </p>
+      <Link
+        to="/catalog"
+        className="mt-2 inline-flex h-9 items-center gap-2 rounded-md bg-accent px-4 text-[12.5px] font-medium text-black transition hover:bg-accent-hover"
+      >
+        <Boxes className="h-4 w-4" />
+        Ir para o Assets Catalog
+        <ArrowRight className="h-3.5 w-3.5" />
+      </Link>
+    </div>
+  )
+}
+
+function OnboardingCard({
+  steps,
+  contextLabel,
+}: {
+  steps: OnboardingStep[]
+  contextLabel?: string
+}) {
+  if (steps.length === 0) {
+    return (
+      <div className="rounded-lg border border-border bg-surface">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-3.5 w-3.5 text-accent" />
+            <h3 className="text-[14px] font-semibold tracking-tight">Próximos passos</h3>
+          </div>
+        </div>
+        <OnboardingPlaceholder />
+      </div>
+    )
+  }
+
+  const total = steps.length
+  const doneCount = steps.filter((s) => s.status === 'done').length
   const pct = Math.round((doneCount / total) * 100)
+  const inProgressIdx = steps.findIndex((s) => s.status === 'in-progress')
 
   return (
     <div className="rounded-lg border border-border bg-surface">
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
         <div className="flex items-center gap-2">
           <Sparkles className="h-3.5 w-3.5 text-accent" />
           <h3 className="text-[14px] font-semibold tracking-tight">Próximos passos</h3>
-          <span className="rounded border border-border bg-bg px-1.5 py-0.5 text-[10.5px] uppercase tracking-wider text-text-muted">
-            pós-migração · 12 mai
-          </span>
+          {contextLabel && (
+            <span className="rounded border border-border bg-bg px-1.5 py-0.5 font-mono text-[10.5px] text-text-secondary">
+              {contextLabel}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <span className="text-[11.5px] text-text-secondary">
@@ -367,77 +239,63 @@ function OnboardingCard() {
             <span className="font-mono text-text-primary">{pct}%</span> completo
           </span>
           <div className="h-1 w-24 overflow-hidden rounded-full bg-bg">
-            <div
-              className="h-full bg-accent transition-all"
-              style={{ width: `${pct}%` }}
-            />
+            <div className="h-full bg-accent transition-all" style={{ width: `${pct}%` }} />
           </div>
         </div>
       </div>
       <ul>
-        {onboardingSteps.map((s) => (
-          <OnboardingStepRow key={s.id} step={s} />
-        ))}
+        {steps.map((s, i) => {
+          const attenuated =
+            s.status === 'not-started' && inProgressIdx >= 0 && i > inProgressIdx
+          return <OnboardingStepRow key={s.id} step={s} attenuated={attenuated} />
+        })}
       </ul>
     </div>
   )
 }
 
-function HealthCard({ item }: { item: (typeof appHealth)[number] }) {
-  const m = healthMeta[item.level]
-  return (
-    <div className={`rounded-lg border bg-surface px-4 py-3.5 ${m.ring}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className={`h-1.5 w-1.5 flex-none rounded-full ${m.dot}`} />
-            <h3 className="truncate font-mono text-[13.5px] text-text-primary">{item.title}</h3>
-          </div>
-          <div className="mt-1.5 text-[12px] text-text-secondary">{item.metric}</div>
-          <div className="mt-0.5 text-[11px] text-text-muted">{item.detail}</div>
-        </div>
-        <span
-          className={`flex-none rounded-full border px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wide ${m.pill}`}
-        >
-          {m.label}
-        </span>
-      </div>
-      <div className="mt-3 border-t border-border pt-2.5">
-        <Link
-          to={`/application-hub/${item.sa}`}
-          className="inline-flex items-center gap-1 text-[11.5px] text-text-secondary hover:text-text-primary"
-        >
-          Abrir aplicação
-          <ArrowRight className="h-3 w-3" />
-        </Link>
-      </div>
-    </div>
-  )
-}
-
 export default function Home() {
+  const { workflows: instances } = useWorkflows()
+  const lastWorkflow = instances.length > 0 ? instances[instances.length - 1] : null
+
+  const onboardingSteps: OnboardingStep[] = lastWorkflow
+    ? (() => {
+        const template = workflowTemplates.find((t) => t.id === lastWorkflow.templateId)
+        return lastWorkflow.steps.map((s, i) => {
+          const tmplStep = template?.onboardingSteps.find((ts) => ts.id === s.id)
+          const status: StepStatus =
+            s.status === 'in-progress'
+              ? 'in-progress'
+              : s.status === 'done'
+              ? 'done'
+              : 'not-started'
+          return {
+            id: i + 1,
+            stepId: s.id,
+            title: s.title,
+            description: tmplStep?.description ?? '',
+            status,
+          }
+        })
+      })()
+    : []
+
   return (
     <div className="space-y-10">
       {/* Section 1 — Hero compacto */}
-      <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-[26px] font-semibold tracking-tight">Bom dia, Luigi</h1>
-          <p className="mt-1.5 text-[13.5px] text-text-secondary">
-            Você tem{' '}
-            <span className="text-text-primary">3 workflows ativos</span> em{' '}
-            <span className="text-text-primary">2 SAs</span> e{' '}
-            <span className="text-warning">1 aprovação pendente</span>.
-          </p>
-        </div>
-        <button className="inline-flex h-10 items-center gap-2 self-start rounded-md bg-accent px-4 text-[13px] font-medium text-black transition hover:bg-accent-hover sm:self-auto">
-          <Plus className="h-4 w-4" />
-          Onboardar nova SA
-        </button>
+      <section>
+        <h1 className="text-[26px] font-semibold tracking-tight">Bom dia, Luigi</h1>
+        <p className="mt-1.5 text-[13.5px] text-text-secondary">
+          Sem workflows ativos no momento — comece onboardando uma SA ou escolhendo um workflow no catálogo.
+        </p>
       </section>
 
       {/* Section 2 — Onboarding card */}
       <section>
-        <OnboardingCard />
+        <OnboardingCard
+          steps={onboardingSteps}
+          contextLabel={lastWorkflow?.templateName}
+        />
       </section>
 
       {/* Section 3 — Resumo de pontos de atenção */}
@@ -450,11 +308,10 @@ export default function Home() {
         </div>
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          {/* Coluna esquerda — Fluxos agênticos pendentes aprovação */}
-          <div className="rounded-lg border border-warning/40 bg-surface ring-1 ring-warning/15">
+          <div className="rounded-lg border border-border bg-surface">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <div className="flex items-center gap-2">
-                <WorkflowIcon className="h-3.5 w-3.5 text-warning" />
+                <WorkflowIcon className="h-3.5 w-3.5 text-text-muted" />
                 <h3 className="text-[13.5px] font-semibold tracking-tight">
                   Fluxos agênticos pendentes aprovação
                 </h3>
@@ -483,7 +340,9 @@ export default function Home() {
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="truncate font-mono text-[12.5px] text-text-primary">{p.workflow}</span>
+                        <span className="truncate font-mono text-[12.5px] text-text-primary">
+                          {p.workflow}
+                        </span>
                         {p.blocking && (
                           <span className="flex-none rounded border border-failure/30 bg-failure/10 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-failure">
                             blocking
@@ -509,11 +368,10 @@ export default function Home() {
             )}
           </div>
 
-          {/* Coluna direita — Alertas da Application Hub */}
           <div className="rounded-lg border border-border bg-surface">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <div className="flex items-center gap-2">
-                <AlertTriangle className="h-3.5 w-3.5 text-warning" />
+                <AlertTriangle className="h-3.5 w-3.5 text-text-muted" />
                 <h3 className="text-[13.5px] font-semibold tracking-tight">Alertas da Application Hub</h3>
               </div>
               {appHubAlerts.length > 0 && (
@@ -559,30 +417,6 @@ export default function Home() {
               </ul>
             )}
           </div>
-        </div>
-      </section>
-
-      {/* Section 4 — Saúde da Application Hub */}
-      <section>
-        <div className="mb-3 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <LayoutGrid className="h-3.5 w-3.5 text-text-muted" />
-            <h2 className="text-[15px] font-semibold tracking-tight">Saúde da Application Hub</h2>
-            <span className="text-[12px] text-text-muted">{appHealth.length} aplicações</span>
-          </div>
-          <Link
-            to="/application-hub"
-            className="inline-flex items-center gap-1 text-[11.5px] text-text-secondary hover:text-text-primary"
-          >
-            ver tudo
-            <ArrowRight className="h-3 w-3" />
-          </Link>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {appHealth.map((h) => (
-            <HealthCard key={h.sa} item={h} />
-          ))}
         </div>
       </section>
     </div>

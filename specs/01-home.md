@@ -50,5 +50,4 @@ Estilo:
 
 \- Real-time indicator visível na seção 3
 
-\- Dados mockados realistas
-
+\- Não tenha mais nenhum dado mockado

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   ChevronRight,
   ChevronDown,
@@ -14,50 +15,16 @@ import {
   Database,
   User,
 } from 'lucide-react'
+import { workflows, type AssetStatus, type WorkflowAsset } from '../data/database'
+import { useWorkflows } from '../contexts/WorkflowsProvider'
 
 /**
  * Asset metadata schema (per spec 06-assets-catalog.md).
  *
- * Workflow schema is intentionally fixed now even though only `wf-migration-vanilla`
- * is populated. The `onboardingSteps` array is the contract consumed by Home's
- * contextual to-do list — when the user selects a workflow in the catalog,
- * Home should hydrate its `todos` from this list. Wiring is deferred (URL/state).
+ * Workflows são lidos do `../data/database` (single source of truth).
+ * Skills/MCPs/Sensors/APIs ainda vivem aqui como mocks lightweight enquanto
+ * o schema deles está se solidificando.
  */
-
-type AssetStatus = 'draft' | 'beta' | 'stable' | 'deprecated'
-type AssetMaturity = 'experimental' | 'production-ready'
-
-type OnboardingStep = {
-  id: string
-  title: string
-  description: string
-  required: boolean
-  dependsOn: string[]
-}
-
-type WorkflowInput = {
-  name: string
-  type: string
-  required: boolean
-  description: string
-  default?: string
-}
-
-type WorkflowAsset = {
-  kind: 'workflow'
-  id: string
-  name: string
-  version: string
-  owner: string
-  description: string
-  type: 'onboarding' | 'build' | 'deploy' | 'rollout' | 'migration' | 'custom'
-  status: AssetStatus
-  maturity: AssetMaturity
-  onboardingSteps: OnboardingStep[]
-  dependencies: { skills: string[]; mcps: string[]; apis: string[] }
-  inputs: WorkflowInput[]
-  usage: { consumers: number; runs7d: number }
-}
 
 type SkillAsset = {
   kind: 'skill'
@@ -118,105 +85,6 @@ type ApiAsset = {
 }
 
 type AnyAsset = WorkflowAsset | SkillAsset | McpAsset | SensorAsset | ApiAsset
-
-const migrationWorkflow: WorkflowAsset = {
-  kind: 'workflow',
-  id: 'wf-migration-vanilla',
-  name: 'Migração Vanilla',
-  version: '0.4.2',
-  owner: 'squad-vanilla-platform',
-  description:
-    'Migra uma SA brownfield para o padrão Operação Vanilla on-platform. Cobre build, deploy, migração de dados e rollout canário com aprovação humana entre fases.',
-  type: 'migration',
-  status: 'beta',
-  maturity: 'experimental',
-  onboardingSteps: [
-    {
-      id: 'step-01-discovery',
-      title: 'Descobrir SA e dependências',
-      description: 'Mapear repos, recursos AWS, filas, tópicos e bancos da SA alvo.',
-      required: true,
-      dependsOn: [],
-    },
-    {
-      id: 'step-02-baseline',
-      title: 'Capturar baseline de SLO',
-      description: 'Snapshot de p95/p99, erro %, throughput e custo dos últimos 30d.',
-      required: true,
-      dependsOn: ['step-01-discovery'],
-    },
-    {
-      id: 'step-03-vanilla-skeleton',
-      title: 'Gerar esqueleto Vanilla',
-      description: 'Scaffold do mono-repo Vanilla + pipeline base (Kaptain/Konstructor).',
-      required: true,
-      dependsOn: ['step-01-discovery'],
-    },
-    {
-      id: 'step-04-policy-check',
-      title: 'Aprovar policy Komply',
-      description: 'Revisar overrides de network egress e secret-scope (human-in-the-loop).',
-      required: true,
-      dependsOn: ['step-03-vanilla-skeleton'],
-    },
-    {
-      id: 'step-05-data-migration',
-      title: 'Plano de migração de dados',
-      description: 'Backfill estratégia (dual-write × cutover) + ensaio em staging.',
-      required: true,
-      dependsOn: ['step-03-vanilla-skeleton'],
-    },
-    {
-      id: 'step-06-canary',
-      title: 'Rollout canário 10 → 50 → 100%',
-      description: 'Shift de tráfego com sensores de SLO ativos e gate humano em 50%.',
-      required: true,
-      dependsOn: ['step-04-policy-check', 'step-05-data-migration'],
-    },
-    {
-      id: 'step-07-decommission',
-      title: 'Desligar pilha legada',
-      description: 'Cutover final + descomissionar recursos antigos após janela de observação.',
-      required: false,
-      dependsOn: ['step-06-canary'],
-    },
-  ],
-  dependencies: {
-    skills: ['scaffold-vanilla-app', 'review-pr-comments', 'plan-data-migration'],
-    mcps: ['kaptain.deploy', 'komply.evaluate', 'pantheon.topic_create'],
-    apis: ['itau-iam', 'itau-cmdb', 'itau-datadog'],
-  },
-  inputs: [
-    {
-      name: 'sa_id',
-      type: 'string',
-      required: true,
-      description: 'Identificador SA alvo (ex: ssa-pix-core).',
-    },
-    {
-      name: 'target_env',
-      type: 'enum(dev|hml|prod)',
-      required: true,
-      description: 'Ambiente de destino para o rollout canário.',
-      default: 'hml',
-    },
-    {
-      name: 'data_strategy',
-      type: 'enum(dual-write|cutover)',
-      required: false,
-      description: 'Estratégia de migração de dados.',
-      default: 'dual-write',
-    },
-    {
-      name: 'auto_decommission',
-      type: 'boolean',
-      required: false,
-      description: 'Desligar pilha legada automaticamente após observação.',
-      default: 'false',
-    },
-  ],
-  usage: { consumers: 4, runs7d: 11 },
-}
 
 const skills: SkillAsset[] = [
   {
@@ -391,7 +259,7 @@ const apis: ApiAsset[] = [
 type TabKey = 'workflows' | 'skills' | 'mcps' | 'sensors' | 'apis'
 
 const tabs: { id: TabKey; label: string; icon: typeof WorkflowIcon; count: number }[] = [
-  { id: 'workflows', label: 'Workflows', icon: WorkflowIcon, count: 1 },
+  { id: 'workflows', label: 'Workflows', icon: WorkflowIcon, count: workflows.length },
   { id: 'skills', label: 'Skills', icon: Sparkles, count: skills.length },
   { id: 'mcps', label: 'MCPs', icon: Plug, count: mcps.length },
   { id: 'sensors', label: 'Sensors', icon: Radar, count: sensors.length },
@@ -528,6 +396,15 @@ function WorkflowItem({
   expanded: boolean
   onToggle: () => void
 }) {
+  const navigate = useNavigate()
+  const { addWorkflow } = useWorkflows()
+
+  const handleUse = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const instance = addWorkflow(wf.id)
+    if (instance) navigate('/')
+  }
+
   return (
     <div
       className={`rounded-lg border bg-surface transition ${
@@ -559,9 +436,15 @@ function WorkflowItem({
           {expanded && (
             <span
               role="button"
-              tabIndex={-1}
-              onClick={(e) => e.stopPropagation()}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-accent px-3 text-[12px] font-medium text-black transition hover:bg-accent-hover"
+              tabIndex={0}
+              onClick={handleUse}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  handleUse(e as unknown as React.MouseEvent)
+                }
+              }}
+              className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md bg-accent px-3 text-[12px] font-medium text-black transition hover:bg-accent-hover"
             >
               Usar workflow
               <ArrowRight className="h-3.5 w-3.5" />
@@ -678,9 +561,8 @@ function WorkflowItem({
 
 export default function AssetsCatalog() {
   const [tab, setTab] = useState<TabKey>('workflows')
-  const workflows: WorkflowAsset[] = [migrationWorkflow]
   const [expandedWorkflows, setExpandedWorkflows] = useState<Set<string>>(
-    new Set([migrationWorkflow.id]),
+    new Set(workflows[0] ? [workflows[0].id] : []),
   )
 
   const toggleWorkflow = (id: string) => {

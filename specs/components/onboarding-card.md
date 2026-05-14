@@ -23,8 +23,10 @@ Os 8 passos canônicos:
 7. Promover pra homologação — ícone Rocket — CTA → /applications/ssa-pix-core
 8. Configurar observabilidade — ícone Activity — CTA → /applications/ssa-pix-core?tab=obs
 
+- Placeholder : Quando o usuário não tiver nenhuma tarefa preenchida , mostre um placeholder seguindo essa spec 'placeholder.md' , coloque um botão de primary CTA para Assets Catalog
+
 Dados mockados:
-- Banner pós-migração com data fictícia recente
+- Não use dados mockados 
 
 Estilo:
 - Reusar paleta, tokens, Card/Badge/Button de 01-Home

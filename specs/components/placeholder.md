@@ -1,0 +1,1 @@
+O Placeholder vai ter um title , description e um icone , todos centralizados . Gere o title , description e icone usando todo o contexto da aplicação
