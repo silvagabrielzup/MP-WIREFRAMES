@@ -1,813 +1,1042 @@
 import { useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
 import {
   ChevronRight,
-  ChevronDown,
-  Activity,
+  Play,
+  Hammer,
+  Rocket,
+  ArrowLeftRight,
+  ShieldCheck,
+  Search,
+  Settings,
   CheckCircle2,
   XCircle,
   Clock3,
-  Hammer,
-  Rocket,
-  Database,
-  GitBranch,
-  Play,
-  Flag,
+  AlertTriangle,
+  Loader2,
+  MinusCircle,
+  RotateCw,
+  Map,
+  Maximize2,
+  Plus,
+  Minus,
+  X,
   Download,
+  FileText,
   MoreHorizontal,
-  Sparkles,
-  ShieldCheck,
-  Terminal,
-  Bot,
-  RefreshCcw,
-  Zap,
-  Code2,
-  ExternalLink,
+  Workflow as WorkflowIcon,
+  GripHorizontal,
 } from 'lucide-react'
 
-type StepStatus = 'success' | 'running' | 'pending' | 'failed' | 'awaiting'
+type StepStatus = 'pending' | 'running' | 'success' | 'failed' | 'skipped'
 type Verb = 'build' | 'deploy' | 'migration' | 'rollout'
-type SensorVerdict = 'pass' | 'warn' | 'fail'
-
-type Sensor = { name: string; verdict: SensorVerdict; detail: string }
 
 type Step = {
   id: string
+  verb: Verb
   name: string
   tool?: string
-  engine?: string
-  duration: string
   status: StepStatus
+  duration?: string
+  sensor?: { name: string; verdict: 'pass' | 'warn' | 'fail' }
   iterations?: number
-  sensors?: Sensor[]
-  startedAt?: string
-  cost?: number
 }
 
-type VerbGroup = {
-  verb: Verb
-  label: string
-  engineLabel: string
-  steps: Step[]
+type Edge = {
+  from: string
+  to: string
+  conditional?: boolean
+  conditionLabel?: string
+  active?: boolean
+  failedPath?: boolean
+  dead?: boolean
 }
 
-const verbMeta: Record<Verb, {
-  icon: typeof Hammer
-  color: string
-  bg: string
-  border: string
-  ring: string
-  dotBg: string
-}> = {
+const steps: Step[] = [
+  { id: 'step-1', verb: 'build', name: 'Clonar repositório', tool: 'github.clone', status: 'success', duration: '12s' },
+  { id: 'step-2', verb: 'build', name: 'Build do mono-repo', tool: 'konstructor.build', status: 'success', duration: '1m 47s', iterations: 3 },
+  { id: 'step-3', verb: 'build', name: 'Scan de dependências', tool: 'konstructor.sbom', status: 'success', duration: '24s', sensor: { name: 'cve-scan-deps', verdict: 'pass' } },
+  { id: 'step-4', verb: 'deploy', name: 'Avaliar policies Komply', tool: 'komply.evaluate', status: 'success', duration: '8s', sensor: { name: 'policy-gate', verdict: 'pass' } },
+  { id: 'step-5', verb: 'deploy', name: 'Provisionar infra (EKS)', tool: 'kaptain.deploy', status: 'running', duration: '2m 14s' },
+  { id: 'step-6', verb: 'deploy', name: 'Aplicar manifestos K8s', tool: 'orkestra.apply', status: 'pending' },
+  { id: 'step-7', verb: 'migration', name: 'Planejar migração de dados', tool: 'migration.plan', status: 'success', duration: '31s' },
+  { id: 'step-8', verb: 'migration', name: 'Executar backfill', tool: 'migration.run', status: 'skipped' },
+  { id: 'step-9', verb: 'rollout', name: 'Canary 10 → 50%', tool: 'kaptain.shift', status: 'pending' },
+  { id: 'step-10', verb: 'rollout', name: 'Promover para 100%', tool: 'kaptain.promote', status: 'pending' },
+]
+
+const edges: Edge[] = [
+  { from: 'step-1', to: 'step-2' },
+  { from: 'step-2', to: 'step-3' },
+  { from: 'step-3', to: 'step-4' },
+  { from: 'step-4', to: 'step-5' },
+  { from: 'step-5', to: 'step-6', active: true },
+  { from: 'step-6', to: 'step-7' },
+  { from: 'step-7', to: 'step-8', conditional: true, conditionLabel: 'if data_strategy=dual-write', dead: true },
+  { from: 'step-8', to: 'step-9' },
+  { from: 'step-9', to: 'step-10' },
+]
+
+const verbMeta: Record<
+  Verb,
+  {
+    label: string
+    icon: typeof Hammer
+    text: string
+    headerBg: string
+    bodyBg: string
+    border: string
+    swatch: string
+  }
+> = {
   build: {
+    label: 'Build',
     icon: Hammer,
-    color: 'text-info',
-    bg: 'bg-info/10',
-    border: 'border-info/30',
-    ring: 'ring-info/30',
-    dotBg: 'bg-info',
+    text: 'text-info',
+    headerBg: 'bg-info',
+    bodyBg: 'bg-info/10',
+    border: 'border-info/60',
+    swatch: 'bg-info',
   },
   deploy: {
+    label: 'Deploy',
     icon: Rocket,
-    color: 'text-accent',
-    bg: 'bg-accent/10',
-    border: 'border-accent/30',
-    ring: 'ring-accent/30',
-    dotBg: 'bg-accent',
+    text: 'text-success',
+    headerBg: 'bg-success',
+    bodyBg: 'bg-success/10',
+    border: 'border-success/60',
+    swatch: 'bg-success',
   },
   migration: {
-    icon: Database,
-    color: 'text-warning',
-    bg: 'bg-warning/10',
-    border: 'border-warning/30',
-    ring: 'ring-warning/30',
-    dotBg: 'bg-warning',
+    label: 'Migration',
+    icon: ArrowLeftRight,
+    text: 'text-warning',
+    headerBg: 'bg-warning',
+    bodyBg: 'bg-warning/10',
+    border: 'border-warning/60',
+    swatch: 'bg-warning',
   },
   rollout: {
-    icon: GitBranch,
-    color: 'text-live',
-    bg: 'bg-live/10',
-    border: 'border-live/30',
-    ring: 'ring-live/30',
-    dotBg: 'bg-live',
-  },
-}
-
-const stepStatusMeta: Record<StepStatus, { icon: typeof CheckCircle2; color: string; ring: string }> = {
-  success: { icon: CheckCircle2, color: 'text-success', ring: 'ring-success/30' },
-  running: { icon: Activity, color: 'text-live', ring: 'ring-live/40' },
-  pending: { icon: Clock3, color: 'text-text-muted', ring: 'ring-border' },
-  failed: { icon: XCircle, color: 'text-failure', ring: 'ring-failure/30' },
-  awaiting: { icon: Clock3, color: 'text-warning', ring: 'ring-warning/30' },
-}
-
-const verbGroups: VerbGroup[] = [
-  {
-    verb: 'build',
-    label: 'Build',
-    engineLabel: 'Konstructor',
-    steps: [
-      {
-        id: 's-plan',
-        name: 'plan-build',
-        tool: 'konstructor.plan',
-        engine: 'Konstructor',
-        duration: '8s',
-        status: 'success',
-        startedAt: '14:32:18',
-        cost: 0.01,
-      },
-      {
-        id: 's-docker',
-        name: 'docker-build',
-        tool: 'konstructor.build_image',
-        engine: 'Konstructor',
-        duration: '1m 42s',
-        status: 'success',
-        startedAt: '14:32:26',
-        cost: 0.07,
-      },
-      {
-        id: 's-sec',
-        name: 'security-scan',
-        tool: 'sensors.security',
-        engine: 'Sensors',
-        duration: '38s',
-        status: 'success',
-        startedAt: '14:34:08',
-        cost: 0.03,
-        sensors: [
-          { name: 'cve-scan', verdict: 'pass', detail: '0 critical, 2 medium' },
-          { name: 'secrets', verdict: 'pass', detail: 'no secrets leaked' },
-          { name: 'sbom', verdict: 'pass', detail: '147 deps, all signed' },
-        ],
-      },
-      {
-        id: 's-qual',
-        name: 'quality-check',
-        tool: 'sensors.quality',
-        engine: 'Sensors',
-        duration: '1m 21s',
-        status: 'success',
-        iterations: 3,
-        startedAt: '14:34:46',
-        cost: 0.12,
-        sensors: [
-          { name: 'lint', verdict: 'pass', detail: 'fixed 4 issues automaticamente' },
-          { name: 'tests', verdict: 'pass', detail: '218 passed, coverage 81%' },
-          { name: 'complexity', verdict: 'warn', detail: 'getOrder() ciclo=14' },
-        ],
-      },
-    ],
-  },
-  {
-    verb: 'deploy',
-    label: 'Deploy',
-    engineLabel: 'Kaptain + Orkestra',
-    steps: [
-      {
-        id: 's-policy',
-        name: 'policy-check',
-        tool: 'komply.evaluate',
-        engine: 'Komply',
-        duration: '12s',
-        status: 'success',
-        startedAt: '14:36:07',
-        cost: 0.02,
-        sensors: [
-          { name: 'network-egress', verdict: 'pass', detail: 'allowlist OK' },
-          { name: 'iam-least-priv', verdict: 'pass', detail: '3 roles, no *' },
-        ],
-      },
-      {
-        id: 's-apply',
-        name: 'apply-stack',
-        tool: 'kaptain.apply',
-        engine: 'Kaptain',
-        duration: '0m 19s',
-        status: 'running',
-        startedAt: '14:36:19',
-        cost: 0.04,
-      },
-      {
-        id: 's-k8s',
-        name: 'k8s-deploy',
-        tool: 'orkestra.rollout',
-        engine: 'Orkestra',
-        duration: '—',
-        status: 'pending',
-      },
-      {
-        id: 's-smoke',
-        name: 'smoke-test',
-        tool: 'kaptain.smoke',
-        engine: 'Kaptain',
-        duration: '—',
-        status: 'pending',
-      },
-    ],
-  },
-  {
-    verb: 'migration',
-    label: 'Migration',
-    engineLabel: 'Migration + Traffik',
-    steps: [
-      {
-        id: 's-schema',
-        name: 'schema-diff',
-        tool: 'migration.diff',
-        engine: 'Migration',
-        duration: '—',
-        status: 'pending',
-      },
-      {
-        id: 's-canary',
-        name: 'canary-route',
-        tool: 'traffik.canary',
-        engine: 'Traffik',
-        duration: '—',
-        status: 'pending',
-      },
-    ],
-  },
-  {
-    verb: 'rollout',
     label: 'Rollout',
-    engineLabel: 'Kaptain',
-    steps: [
-      {
-        id: 's-shift-5',
-        name: 'shift-5pct',
-        tool: 'kaptain.traffic_shift',
-        engine: 'Kaptain',
-        duration: '—',
-        status: 'pending',
-      },
-      {
-        id: 's-shift-50',
-        name: 'shift-50pct',
-        tool: 'kaptain.traffic_shift',
-        engine: 'Kaptain',
-        duration: '—',
-        status: 'pending',
-      },
-      {
-        id: 's-shift-100',
-        name: 'shift-100pct',
-        tool: 'kaptain.traffic_shift',
-        engine: 'Kaptain',
-        duration: '—',
-        status: 'pending',
-      },
-    ],
-  },
-]
-
-const stepDetailMap: Record<string, {
-  input: { key: string; value: string }[]
-  output: { key: string; value: string }[]
-  decision: { rationale: string; alternatives: { option: string; reason: string }[] }
-}> = {
-  's-apply': {
-    input: [
-      { key: 'sa', value: 'ssa-pix-core' },
-      { key: 'environment', value: 'prod-eu-west-1' },
-      { key: 'image_digest', value: 'sha256:b2c4…d8f1' },
-      { key: 'stack_template', value: 'vanilla/v3.2.1' },
-      { key: 'parallel_replicas', value: '4' },
-    ],
-    output: [
-      { key: 'cloudformation_id', value: 'arn:aws:cf:eu-west-1:…:stack/pix/3f' },
-      { key: 'estimated_completion', value: '2m 04s' },
-      { key: 'resources_planned', value: '17 (3 IAM, 4 SG, 6 ECS, 4 ALB)' },
-    ],
-    decision: {
-      rationale:
-        'Selecionei stack template vanilla/v3.2.1 (LTS) ao invés de v3.3.0-rc porque a SA está marcada como tier-1 e o release candidate não foi validado em workload PIX. O grupo migration tem dependência direta em CF outputs, então apply-stack precisa concluir antes do diff schema.',
-      alternatives: [
-        { option: 'vanilla/v3.3.0-rc', reason: 'RC, não validado em tier-1 PIX' },
-        { option: 'kaptain.apply --dry-run primeiro', reason: 'duplicaria latência sem ganho — sensors já validaram' },
-      ],
-    },
+    icon: Play,
+    text: 'text-accent',
+    headerBg: 'bg-accent',
+    bodyBg: 'bg-accent/10',
+    border: 'border-accent/60',
+    swatch: 'bg-accent',
   },
 }
 
-const toolCallsCount = 47
-const sensorsCount = 9
-const auditEventsCount = 3
+const statusMeta: Record<
+  StepStatus,
+  { icon: typeof CheckCircle2; color: string; label: string }
+> = {
+  pending: { icon: Clock3, color: 'text-text-muted', label: 'pending' },
+  running: { icon: Loader2, color: 'text-info', label: 'running' },
+  success: { icon: CheckCircle2, color: 'text-success', label: 'success' },
+  failed: { icon: XCircle, color: 'text-failure', label: 'failed' },
+  skipped: { icon: MinusCircle, color: 'text-text-muted', label: 'skipped' },
+}
 
-const tabs = [
-  { id: 'timeline', label: 'Timeline', icon: Activity, badge: undefined as string | undefined },
-  { id: 'tools', label: 'Tool calls', icon: Terminal, badge: String(toolCallsCount) },
-  { id: 'sensors', label: 'Sensores', icon: ShieldCheck, badge: String(sensorsCount) },
-  { id: 'audit', label: 'Auditoria', icon: Flag, badge: String(auditEventsCount) },
-  { id: 'replay', label: 'Replay', icon: RefreshCcw, badge: undefined },
-  { id: 'cost', label: 'Custo', icon: Zap, badge: 'R$ 0,42' },
+const NODE_W = 260
+const NODE_H = 116
+const NODE_GAP = 64
+const NODE_PAD_X = 48
+const ROW_Y = 56
+const CANVAS_PAD_BOTTOM = 56
+
+const CANVAS_W = NODE_PAD_X * 2 + steps.length * NODE_W + (steps.length - 1) * NODE_GAP
+const CANVAS_H = ROW_Y + NODE_H + CANVAS_PAD_BOTTOM
+
+function nodeX(idx: number) {
+  return NODE_PAD_X + idx * (NODE_W + NODE_GAP)
+}
+const NODE_Y = ROW_Y
+
+const verbsOrder: Verb[] = ['build', 'deploy', 'migration', 'rollout']
+
+type Phase = { verb: Verb; startIdx: number; endIdx: number; count: number }
+
+function computePhases(): Phase[] {
+  const out: Phase[] = []
+  steps.forEach((s, i) => {
+    const last = out[out.length - 1]
+    if (last && last.verb === s.verb) {
+      last.endIdx = i
+      last.count += 1
+    } else {
+      out.push({ verb: s.verb, startIdx: i, endIdx: i, count: 1 })
+    }
+  })
+  return out
+}
+
+const phases = computePhases()
+
+type TabKey = 'fluxo' | 'tools' | 'sensors' | 'audit' | 'replay' | 'cost'
+
+const tabs: { id: TabKey; label: string; count?: number }[] = [
+  { id: 'fluxo', label: 'Fluxo' },
+  { id: 'tools', label: 'Tool calls', count: 38 },
+  { id: 'sensors', label: 'Sensores', count: 6 },
+  { id: 'audit', label: 'Auditoria', count: 3 },
+  { id: 'replay', label: 'Replay' },
+  { id: 'cost', label: 'Custo' },
 ]
 
-export default function WorkflowTrackerDetail() {
-  const [selectedStepId, setSelectedStepId] = useState<string>('s-apply')
-  const [activeTab, setActiveTab] = useState<string>('timeline')
-  const [open, setOpen] = useState({ input: true, output: true, sensors: true, decision: true })
+function StatusIcon({ status }: { status: StepStatus }) {
+  const m = statusMeta[status]
+  const Icon = m.icon
+  return <Icon className={`h-4 w-4 ${m.color} ${status === 'running' ? 'animate-spin' : ''}`} />
+}
 
-  const allSteps = verbGroups.flatMap((g) => g.steps.map((s) => ({ ...s, verb: g.verb })))
-  const selectedStep = allSteps.find((s) => s.id === selectedStepId) ?? allSteps[0]
-  const selectedDetail = stepDetailMap[selectedStep.id] ?? stepDetailMap['s-apply']
-  const verb = verbMeta[selectedStep.verb]
-
-  const totalSteps = allSteps.length
-  const doneSteps = allSteps.filter((s) => s.status === 'success').length
+function StepNode({
+  step,
+  idx,
+  selected,
+  onClick,
+}: {
+  step: Step
+  idx: number
+  selected: boolean
+  onClick: () => void
+}) {
+  const x = nodeX(idx)
+  const verb = verbMeta[step.verb]
+  const VerbIcon = verb.icon
+  const isRunning = step.status === 'running'
+  const isFailed = step.status === 'failed'
+  const isPending = step.status === 'pending'
+  const isSkipped = step.status === 'skipped'
 
   return (
-    <div className="space-y-5">
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-1.5 text-[11.5px] text-text-muted">
-        <span className="hover:text-text-secondary">Management Plane</span>
-        <ChevronRight className="h-3 w-3" />
-        <a href="/workflows" className="hover:text-text-secondary">Workflow Tracker</a>
-        <ChevronRight className="h-3 w-3" />
-        <span className="font-mono text-text-secondary">wf_8b3f-2a91</span>
+    <button
+      onClick={onClick}
+      style={{ left: x, top: NODE_Y, width: NODE_W, height: NODE_H }}
+      className={`absolute overflow-hidden rounded-lg border bg-surface text-left transition hover:shadow-lg ${
+        isFailed ? 'border-failure ring-1 ring-failure/30' : verb.border
+      } ${selected ? 'ring-2 ring-text-primary' : ''} ${isPending ? 'opacity-50' : ''} ${
+        isSkipped ? 'opacity-50 [border-style:dashed]' : ''
+      } ${isRunning ? `${verb.border} animate-pulse-live` : ''}`}
+    >
+      <div className={`flex h-7 items-center gap-1.5 px-2.5 ${verb.headerBg} text-black/90`}>
+        <VerbIcon className="h-3 w-3" />
+        <span className="text-[10.5px] font-semibold uppercase tracking-wider">
+          {verb.label}
+          {step.tool && (
+            <span className="font-mono normal-case opacity-80"> · {step.tool.split('.')[0]}</span>
+          )}
+        </span>
       </div>
 
-      {/* Header */}
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="font-mono text-[24px] font-semibold tracking-tight">wf_8b3f-2a91</h1>
-              <span className="inline-flex items-center gap-1.5 rounded-md border border-live/30 bg-live/10 px-2.5 py-1 text-[11.5px] font-medium uppercase tracking-wider text-live">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="absolute inline-flex h-full w-full animate-pulse-live rounded-full bg-live opacity-80" />
-                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-live" />
-                </span>
-                running
-              </span>
-              <span className="flex items-center gap-1.5 text-[11.5px] text-text-muted">
-                <Activity className="h-3 w-3 text-live animate-pulse-live" />
-                live · updated 1s ago
-              </span>
-            </div>
-            <div className="mt-2.5 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[12.5px] text-text-secondary">
-              <span className="flex items-center gap-1.5">
-                <Sparkles className="h-3.5 w-3.5 text-accent" />
-                <span>onboarding-vanilla-brownfield</span>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="text-text-muted">SA:</span>
-                <a href="/assets/ssa-pix-core" className="font-mono text-text-primary hover:text-accent">ssa-pix-core</a>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent/25 text-[9.5px] font-medium text-accent">LL</span>
-                <span>luigi.lima</span>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="text-text-muted">início</span>
-                <span className="font-mono">14:32:18</span>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="text-text-muted">duração</span>
-                <span className="font-mono text-text-primary">2m 13s</span>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="text-text-muted">custo</span>
-                <span className="font-mono">R$ 0,42</span>
-              </span>
-            </div>
-          </div>
+      <span aria-hidden className={`absolute left-0 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-border ${verb.swatch}`} />
+      <span aria-hidden className={`absolute right-0 top-1/2 h-2 w-2 translate-x-1/2 -translate-y-1/2 rounded-full border border-border ${verb.swatch}`} />
 
-          <div className="flex flex-wrap items-center gap-2">
-            <button className="flex h-9 items-center gap-1.5 rounded-md border border-border bg-surface px-3 text-[12.5px] text-text-secondary hover:text-text-primary">
-              <Play className="h-3.5 w-3.5" />
-              Replay
-            </button>
-            <button className="flex h-9 items-center gap-1.5 rounded-md border border-border bg-surface px-3 text-[12.5px] text-text-secondary hover:text-text-primary">
-              <Flag className="h-3.5 w-3.5" />
-              Annotate as failure
-            </button>
-            <button className="flex h-9 items-center gap-1.5 rounded-md border border-border bg-surface px-3 text-[12.5px] text-text-secondary hover:text-text-primary">
-              <Download className="h-3.5 w-3.5" />
-              Export trace
-            </button>
-            <button className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-surface text-text-secondary hover:text-text-primary">
-              <MoreHorizontal className="h-4 w-4" />
-            </button>
-          </div>
+      <div className={`flex flex-1 flex-col gap-1.5 px-3 py-2 ${verb.bodyBg}`}>
+        <div className="flex items-center gap-2">
+          <StatusIcon status={step.status} />
+          <span className="truncate text-[12.5px] font-semibold text-text-primary">{step.name}</span>
         </div>
-
-        {/* Progress strip */}
-        <div className="rounded-lg border border-border bg-surface px-4 py-3">
-          <div className="flex items-center justify-between text-[11.5px]">
-            <div className="flex items-center gap-3 text-text-muted">
-              <span>
-                <span className="text-text-primary">{doneSteps}</span> / {totalSteps} steps
-              </span>
-              <span className="h-3 w-px bg-border" />
-              <span>
-                <span className="text-text-primary">{toolCallsCount}</span> tool calls
-              </span>
-              <span className="h-3 w-px bg-border" />
-              <span>
-                <span className="text-text-primary">{sensorsCount}</span> sensores
-              </span>
-              <span className="h-3 w-px bg-border" />
-              <span>
-                <span className="text-warning">1</span> iteração automática
-              </span>
-            </div>
-            <div className="text-text-muted">
-              ETA <span className="font-mono text-text-primary">3m 47s</span>
-            </div>
-          </div>
-          <div className="mt-2.5 flex h-1.5 w-full overflow-hidden rounded-full bg-[#1B1D22]">
-            {verbGroups.map((g) => {
-              const total = g.steps.length
-              const done = g.steps.filter((s) => s.status === 'success').length
-              const running = g.steps.some((s) => s.status === 'running')
-              const meta = verbMeta[g.verb]
-              const widthPct = (total / totalSteps) * 100
-              const fillPct = running ? ((done + 0.5) / total) * 100 : (done / total) * 100
-              return (
-                <div
-                  key={g.verb}
-                  className="relative border-r border-bg/60 last:border-r-0"
-                  style={{ width: `${widthPct}%` }}
-                  title={`${g.label}: ${done}/${total}`}
-                >
-                  <div className={`absolute inset-y-0 left-0 ${meta.dotBg}`} style={{ width: `${fillPct}%` }} />
-                </div>
-              )
-            })}
-          </div>
-          <div className="mt-2 flex items-center justify-between text-[10.5px] uppercase tracking-wide text-text-muted">
-            {verbGroups.map((g) => (
-              <span key={g.verb} className="flex items-center gap-1.5">
-                <span className={`h-1.5 w-1.5 rounded-full ${verbMeta[g.verb].dotBg}`} />
-                {g.label}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-border">
-        {tabs.map((t) => {
-          const Icon = t.icon
-          const active = activeTab === t.id
-          return (
-            <button
-              key={t.id}
-              onClick={() => setActiveTab(t.id)}
-              className={`relative flex items-center gap-2 px-3.5 py-2.5 text-[12.5px] transition ${
-                active ? 'text-text-primary' : 'text-text-secondary hover:text-text-primary'
+        {step.tool && (
+          <div className="truncate font-mono text-[11px] text-text-secondary">{step.tool}</div>
+        )}
+        <div className="mt-auto flex items-center gap-1.5">
+          {step.duration && (
+            <span className="rounded border border-border bg-bg/80 px-1.5 py-0.5 font-mono text-[10px] text-text-muted">
+              {step.duration}
+            </span>
+          )}
+          {step.sensor && (
+            <span
+              className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium ${
+                step.sensor.verdict === 'pass'
+                  ? 'border-success/30 bg-success/10 text-success'
+                  : step.sensor.verdict === 'warn'
+                  ? 'border-warning/30 bg-warning/10 text-warning'
+                  : 'border-failure/30 bg-failure/10 text-failure'
               }`}
             >
-              <Icon className="h-3.5 w-3.5" />
-              <span>{t.label}</span>
-              {t.badge && (
-                <span className="rounded-full bg-[#1E2027] px-1.5 py-0.5 font-mono text-[10px] text-text-muted">
-                  {t.badge}
-                </span>
-              )}
-              {active && <span className="absolute inset-x-0 -bottom-px h-[2px] bg-accent" />}
-            </button>
-          )
-        })}
+              <ShieldCheck className="h-2.5 w-2.5" />
+              {step.sensor.name}
+            </span>
+          )}
+          {step.iterations && step.iterations > 1 && (
+            <span className="inline-flex items-center gap-1 rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent">
+              <RotateCw className="h-2.5 w-2.5" />
+              {step.iterations}
+            </span>
+          )}
+        </div>
       </div>
+    </button>
+  )
+}
 
-      {/* Tab content: Timeline */}
-      {activeTab === 'timeline' && (
-        <div className="grid grid-cols-[1.4fr_1fr] gap-5">
-          {/* Left: Timeline */}
-          <div className="space-y-5">
-            {verbGroups.map((group) => {
-              const meta = verbMeta[group.verb]
-              const Icon = meta.icon
-              const doneInGroup = group.steps.filter((s) => s.status === 'success').length
-              const runningInGroup = group.steps.some((s) => s.status === 'running')
-              const totalInGroup = group.steps.length
-              return (
-                <div key={group.verb} className="rounded-lg border border-border bg-surface">
-                  <div className="flex items-center justify-between border-b border-border px-4 py-3">
-                    <div className="flex items-center gap-2.5">
-                      <span className={`flex h-7 w-7 items-center justify-center rounded-md border ${meta.bg} ${meta.border}`}>
-                        <Icon className={`h-3.5 w-3.5 ${meta.color}`} />
-                      </span>
-                      <div>
-                        <div className={`text-[13px] font-semibold ${meta.color}`}>{group.label}</div>
-                        <div className="text-[10.5px] uppercase tracking-wide text-text-muted">{group.engineLabel}</div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 text-[11px]">
-                      {runningInGroup && (
-                        <span className="inline-flex items-center gap-1 rounded border border-live/30 bg-live/10 px-1.5 py-0.5 text-live">
-                          <span className="h-1.5 w-1.5 animate-pulse-live rounded-full bg-live" />
-                          em execução
-                        </span>
-                      )}
-                      <span className="font-mono text-text-muted">
-                        <span className={doneInGroup === totalInGroup ? 'text-success' : 'text-text-primary'}>{doneInGroup}</span>
-                        /{totalInGroup}
-                      </span>
-                    </div>
-                  </div>
+function indexOf(id: string) {
+  return steps.findIndex((s) => s.id === id)
+}
 
-                  <ol className="relative px-4 py-3">
-                    <span className="absolute left-[26px] top-5 bottom-5 w-px bg-border" />
-                    {group.steps.map((step, idx) => {
-                      const status = stepStatusMeta[step.status]
-                      const StatusIcon = status.icon
-                      const isSelected = step.id === selectedStepId
-                      const sensorPass = step.sensors?.filter((s) => s.verdict === 'pass').length ?? 0
-                      const sensorWarn = step.sensors?.filter((s) => s.verdict === 'warn').length ?? 0
-                      const sensorFail = step.sensors?.filter((s) => s.verdict === 'fail').length ?? 0
-                      return (
-                        <li key={step.id} className="relative">
-                          <button
-                            onClick={() => setSelectedStepId(step.id)}
-                            className={`group relative my-1 flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left transition ${
-                              isSelected
-                                ? `border-border-strong bg-[#1B1D22] ring-1 ${verb.ring}`
-                                : 'border-transparent hover:bg-[#181A1F]'
-                            }`}
-                          >
-                            <span
-                              className={`relative z-[1] flex h-6 w-6 flex-none items-center justify-center rounded-full bg-bg ring-1 ${status.ring}`}
-                            >
-                              <StatusIcon className={`h-3.5 w-3.5 ${status.color} ${step.status === 'running' ? 'animate-pulse-live' : ''}`} />
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className={`text-[13px] font-medium ${step.status === 'pending' ? 'text-text-muted' : 'text-text-primary'}`}>
-                                  {step.name}
-                                </span>
-                                {step.tool && (
-                                  <span className="font-mono text-[11px] text-text-muted">{step.tool}</span>
-                                )}
-                                {step.iterations && step.iterations > 1 && (
-                                  <span className="inline-flex items-center gap-1 rounded border border-warning/30 bg-warning/10 px-1.5 py-0.5 text-[10px] text-warning">
-                                    <RefreshCcw className="h-2.5 w-2.5" />
-                                    {step.iterations} iterações
-                                  </span>
-                                )}
-                              </div>
-                              <div className="mt-1 flex items-center gap-2 text-[11px] text-text-muted">
-                                {step.startedAt && (
-                                  <span className="font-mono">início {step.startedAt}</span>
-                                )}
-                                {step.sensors && step.sensors.length > 0 && (
-                                  <>
-                                    <span className="text-border-strong">·</span>
-                                    <span className="inline-flex items-center gap-1">
-                                      <ShieldCheck className="h-2.5 w-2.5" />
-                                      {sensorPass > 0 && <span className="text-success">{sensorPass} ok</span>}
-                                      {sensorWarn > 0 && <span className="text-warning">{sensorWarn} warn</span>}
-                                      {sensorFail > 0 && <span className="text-failure">{sensorFail} fail</span>}
-                                    </span>
-                                  </>
-                                )}
-                                {step.cost !== undefined && (
-                                  <>
-                                    <span className="text-border-strong">·</span>
-                                    <span className="font-mono">R$ {step.cost.toFixed(2)}</span>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                            <span className={`flex-none font-mono text-[11.5px] ${step.status === 'pending' ? 'text-text-muted' : step.status === 'running' ? 'text-live' : 'text-text-secondary'}`}>
-                              {step.duration}
-                            </span>
-                            <ChevronRight className={`h-3.5 w-3.5 flex-none transition ${isSelected ? 'text-text-secondary' : 'text-text-muted opacity-0 group-hover:opacity-100'}`} />
-                          </button>
-                          {idx < group.steps.length - 1 && <div className="h-1" />}
-                        </li>
-                      )
-                    })}
-                  </ol>
-                </div>
-              )
-            })}
-          </div>
+function edgePath(fromIdx: number, toIdx: number) {
+  const x1 = nodeX(fromIdx) + NODE_W
+  const y1 = NODE_Y + NODE_H / 2
+  const x2 = nodeX(toIdx)
+  const y2 = NODE_Y + NODE_H / 2
+  const dx = Math.max(40, (x2 - x1) * 0.5)
+  return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`
+}
 
-          {/* Right: Step detail (sticky) */}
-          <aside className="sticky top-20 h-fit max-h-[calc(100vh-6rem)] overflow-y-auto rounded-lg border border-border bg-surface">
-            {/* Header */}
-            <div className={`flex items-start justify-between gap-3 border-b border-border px-4 py-3.5 ${verb.bg}`}>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className={`flex h-6 w-6 items-center justify-center rounded-md border ${verb.border} bg-bg`}>
-                    {(() => { const I = verb.icon; return <I className={`h-3 w-3 ${verb.color}`} /> })()}
-                  </span>
-                  <span className={`text-[10.5px] font-medium uppercase tracking-wide ${verb.color}`}>
-                    {selectedStep.verb}
-                  </span>
-                  <span className="text-[10.5px] text-text-muted">·</span>
-                  <span className="text-[10.5px] text-text-muted">{selectedStep.engine}</span>
-                </div>
-                <div className="mt-1.5 text-[15px] font-semibold text-text-primary">{selectedStep.name}</div>
-                {selectedStep.tool && (
-                  <div className="mt-1 font-mono text-[11.5px] text-text-muted">{selectedStep.tool}</div>
-                )}
-              </div>
-              <div className="flex-none text-right">
-                <div className={`inline-flex items-center gap-1.5 rounded border px-1.5 py-0.5 text-[10.5px] ${
-                  selectedStep.status === 'running' ? 'border-live/30 bg-live/15 text-live' :
-                  selectedStep.status === 'success' ? 'border-success/30 bg-success/15 text-success' :
-                  selectedStep.status === 'failed' ? 'border-failure/30 bg-failure/15 text-failure' :
-                  selectedStep.status === 'awaiting' ? 'border-warning/30 bg-warning/15 text-warning' :
-                  'border-border bg-bg text-text-muted'
-                }`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${
-                    selectedStep.status === 'running' ? 'bg-live animate-pulse-live' :
-                    selectedStep.status === 'success' ? 'bg-success' :
-                    selectedStep.status === 'failed' ? 'bg-failure' :
-                    selectedStep.status === 'awaiting' ? 'bg-warning' :
-                    'bg-text-muted'
-                  }`} />
-                  {selectedStep.status}
-                </div>
-                <div className="mt-1.5 font-mono text-[11.5px] text-text-secondary">{selectedStep.duration}</div>
-              </div>
-            </div>
+function EdgeLayer({ selectedId }: { selectedId: string | null }) {
+  return (
+    <svg width={CANVAS_W} height={CANVAS_H} className="pointer-events-none absolute inset-0">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#3a3c45" />
+        </marker>
+        <marker id="arrow-active" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" className="fill-info" />
+        </marker>
+        <marker id="arrow-dead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#2a2b32" />
+        </marker>
+        {/* gradient per verb-pair for crossing edges */}
+        {(['info', 'success', 'warning', 'accent'] as const).map((from) =>
+          (['info', 'success', 'warning', 'accent'] as const).map((to) =>
+            from === to ? null : (
+              <linearGradient
+                key={`${from}-${to}`}
+                id={`g-${from}-${to}`}
+                x1="0%"
+                y1="0%"
+                x2="100%"
+                y2="0%"
+              >
+                <stop offset="0%" className={`text-${from}`} stopColor="currentColor" />
+                <stop offset="100%" className={`text-${to}`} stopColor="currentColor" />
+              </linearGradient>
+            ),
+          ),
+        )}
+      </defs>
+      {edges.map((e) => {
+        const fromIdx = indexOf(e.from)
+        const toIdx = indexOf(e.to)
+        if (fromIdx < 0 || toIdx < 0) return null
+        const fromStep = steps[fromIdx]
+        const toStep = steps[toIdx]
+        const d = edgePath(fromIdx, toIdx)
+        const isCross = fromStep.verb !== toStep.verb
 
-            {/* Section: Input */}
-            <Collapsible
-              open={open.input}
-              onToggle={() => setOpen((o) => ({ ...o, input: !o.input }))}
-              label="Input"
-              count={selectedDetail.input.length}
-              icon={<Code2 className="h-3 w-3" />}
-            >
-              <ul className="space-y-1.5 px-4 pb-3">
-                {selectedDetail.input.map((kv) => (
-                  <li key={kv.key} className="grid grid-cols-[110px_1fr] gap-2 text-[11.5px]">
-                    <span className="text-text-muted">{kv.key}</span>
-                    <span className="break-all font-mono text-text-primary">{kv.value}</span>
-                  </li>
-                ))}
-              </ul>
-            </Collapsible>
+        const verbToken = (v: Verb) =>
+          v === 'build' ? 'info' : v === 'deploy' ? 'success' : v === 'migration' ? 'warning' : 'accent'
 
-            {/* Section: Output */}
-            <Collapsible
-              open={open.output}
-              onToggle={() => setOpen((o) => ({ ...o, output: !o.output }))}
-              label="Output"
-              count={selectedDetail.output.length}
-              icon={<Terminal className="h-3 w-3" />}
-              live={selectedStep.status === 'running'}
-            >
-              <ul className="space-y-1.5 px-4 pb-3">
-                {selectedDetail.output.map((kv) => (
-                  <li key={kv.key} className="grid grid-cols-[140px_1fr] gap-2 text-[11.5px]">
-                    <span className="text-text-muted">{kv.key}</span>
-                    <span className="break-all font-mono text-text-primary">{kv.value}</span>
-                  </li>
-                ))}
-                {selectedStep.status === 'running' && (
-                  <li className="flex items-center gap-2 pt-1 text-[11px] text-live">
-                    <Activity className="h-3 w-3 animate-pulse-live" />
-                    streaming…
-                  </li>
-                )}
-              </ul>
-            </Collapsible>
+        const stroke = e.failedPath
+          ? 'stroke-failure'
+          : e.active
+          ? 'stroke-info'
+          : e.dead
+          ? 'stroke-[#2a2b32]'
+          : isCross
+          ? `[stroke:url(#g-${verbToken(fromStep.verb)}-${verbToken(toStep.verb)})]`
+          : 'stroke-[#3a3c45]'
 
-            {/* Section: Sensores */}
-            <Collapsible
-              open={open.sensors}
-              onToggle={() => setOpen((o) => ({ ...o, sensors: !o.sensors }))}
-              label="Sensores"
-              count={selectedStep.sensors?.length ?? 0}
-              icon={<ShieldCheck className="h-3 w-3" />}
-            >
-              <div className="px-4 pb-3">
-                {selectedStep.sensors && selectedStep.sensors.length > 0 ? (
-                  <ul className="space-y-1.5">
-                    {selectedStep.sensors.map((s) => {
-                      const v = s.verdict
-                      const SensorIcon = v === 'pass' ? CheckCircle2 : v === 'fail' ? XCircle : Clock3
-                      const colorCls = v === 'pass' ? 'text-success' : v === 'fail' ? 'text-failure' : 'text-warning'
-                      return (
-                        <li key={s.name} className="flex items-start gap-2 rounded-md border border-border bg-bg px-2.5 py-1.5 text-[11.5px]">
-                          <SensorIcon className={`mt-0.5 h-3 w-3 flex-none ${colorCls}`} />
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono text-text-primary">{s.name}</span>
-                              <span className={`text-[10px] uppercase tracking-wide ${colorCls}`}>{v}</span>
-                            </div>
-                            <div className="text-[11px] text-text-secondary">{s.detail}</div>
-                          </div>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                ) : (
-                  <p className="text-[11.5px] text-text-muted">Nenhum sensor acionado neste step.</p>
-                )}
-              </div>
-            </Collapsible>
+        const marker = e.active
+          ? 'url(#arrow-active)'
+          : e.dead
+          ? 'url(#arrow-dead)'
+          : 'url(#arrow)'
 
-            {/* Section: Decisão do agente */}
-            <Collapsible
-              open={open.decision}
-              onToggle={() => setOpen((o) => ({ ...o, decision: !o.decision }))}
-              label="Decisão do agente"
-              icon={<Bot className="h-3 w-3" />}
-              accent
-            >
-              <div className="space-y-3 px-4 pb-3 text-[12px]">
-                <div>
-                  <div className="mb-1 text-[10.5px] uppercase tracking-wide text-text-muted">rationale</div>
-                  <p className="leading-relaxed text-text-secondary">{selectedDetail.decision.rationale}</p>
-                </div>
-                <div>
-                  <div className="mb-1.5 text-[10.5px] uppercase tracking-wide text-text-muted">alternatives considered</div>
-                  <ul className="space-y-1.5">
-                    {selectedDetail.decision.alternatives.map((a, i) => (
-                      <li key={i} className="rounded-md border border-border bg-bg px-2.5 py-1.5">
-                        <div className="font-mono text-[11.5px] text-text-primary">{a.option}</div>
-                        <div className="text-[11px] text-text-muted">→ {a.reason}</div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            </Collapsible>
+        const labelX = (nodeX(fromIdx) + NODE_W + nodeX(toIdx)) / 2
+        const labelY = NODE_Y + NODE_H / 2 - 14
 
-            {/* Footer */}
-            <div className="flex items-center gap-2 border-t border-border bg-[#101115] px-4 py-3">
-              <button className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md border border-border bg-surface px-3 text-[11.5px] text-text-secondary hover:text-text-primary">
-                <Code2 className="h-3.5 w-3.5" />
-                Ver raw trace
-                <ExternalLink className="h-3 w-3" />
-              </button>
-              <button className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-surface px-3 text-[11.5px] text-text-secondary hover:text-text-primary">
-                <Play className="h-3.5 w-3.5" />
-                Replay step
-              </button>
-            </div>
-          </aside>
-        </div>
-      )}
+        const touched = selectedId && (selectedId === e.from || selectedId === e.to)
+        return (
+          <g key={`${e.from}-${e.to}`}>
+            <path
+              d={d}
+              fill="none"
+              strokeWidth={touched ? 2 : 1.5}
+              className={`${stroke} ${e.conditional ? '[stroke-dasharray:4_4]' : ''}`}
+              markerEnd={marker}
+            />
+            {e.conditionLabel && (
+              <g>
+                <rect
+                  x={labelX - 110}
+                  y={labelY - 9}
+                  rx={3}
+                  ry={3}
+                  width={220}
+                  height={18}
+                  className="fill-[#101115] stroke-border"
+                  strokeWidth={1}
+                />
+                <text
+                  x={labelX}
+                  y={labelY + 4}
+                  textAnchor="middle"
+                  className="fill-text-muted"
+                  style={{ font: '10px ui-monospace, SFMono-Regular, monospace' }}
+                >
+                  {e.conditionLabel}
+                </text>
+              </g>
+            )}
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
 
-      {/* Other tabs (placeholder content but consistent style) */}
-      {activeTab !== 'timeline' && (
-        <div className="flex h-[400px] items-center justify-center rounded-lg border border-dashed border-border bg-surface">
-          <div className="text-center">
-            <div className="text-[14px] text-text-primary">Tab "{tabs.find((t) => t.id === activeTab)?.label}"</div>
-            <div className="mt-1 text-[12px] text-text-muted">Conteúdo desta aba ainda não gerado pelo loop.</div>
-          </div>
-        </div>
-      )}
+function PhaseStrip({ onJump }: { onJump: (verb: Verb) => void }) {
+  const totalSpan = nodeX(steps.length - 1) + NODE_W - nodeX(0)
+  return (
+    <div className="relative h-9 w-full overflow-hidden rounded-md border border-border bg-[#101115]">
+      {phases.map((p) => {
+        const left = nodeX(p.startIdx) - nodeX(0)
+        const width = nodeX(p.endIdx) + NODE_W - nodeX(p.startIdx)
+        const meta = verbMeta[p.verb]
+        const Icon = meta.icon
+        return (
+          <button
+            key={p.verb + p.startIdx}
+            onClick={() => onJump(p.verb)}
+            style={{
+              left: `${(left / totalSpan) * 100}%`,
+              width: `${(width / totalSpan) * 100}%`,
+            }}
+            className={`absolute inset-y-0 flex items-center gap-1.5 border-r border-border/40 px-2 ${meta.bodyBg} hover:opacity-90`}
+          >
+            <span className={`flex h-4 w-4 items-center justify-center rounded ${meta.headerBg} text-black`}>
+              <Icon className="h-2.5 w-2.5" />
+            </span>
+            <span className={`text-[10.5px] font-semibold uppercase tracking-wider ${meta.text}`}>
+              {meta.label}
+            </span>
+            <span className="text-[10px] text-text-muted">· {p.count}</span>
+          </button>
+        )
+      })}
     </div>
   )
 }
 
-function Collapsible({
-  open,
-  onToggle,
-  label,
-  count,
-  icon,
-  accent,
-  live,
-  children,
-}: {
-  open: boolean
-  onToggle: () => void
-  label: string
-  count?: number
-  icon?: React.ReactNode
-  accent?: boolean
-  live?: boolean
-  children: React.ReactNode
-}) {
+function Legend() {
   return (
-    <div className="border-b border-border last:border-b-0">
-      <button
-        onClick={onToggle}
-        className="flex w-full items-center justify-between px-4 py-2.5 text-left transition hover:bg-[#181A1F]"
-      >
-        <div className="flex items-center gap-2">
-          <span className={`flex h-5 w-5 items-center justify-center rounded ${accent ? 'bg-accent/15 text-accent' : 'bg-[#1E2027] text-text-secondary'}`}>
-            {icon}
-          </span>
-          <span className={`text-[11.5px] font-medium uppercase tracking-wider ${accent ? 'text-accent' : 'text-text-secondary'}`}>
-            {label}
-          </span>
-          {count !== undefined && count > 0 && (
-            <span className="rounded-full bg-[#1E2027] px-1.5 py-0.5 font-mono text-[10px] text-text-muted">{count}</span>
-          )}
-          {live && (
-            <span className="inline-flex items-center gap-1 rounded border border-live/30 bg-live/10 px-1.5 py-0.5 text-[10px] text-live">
-              <span className="h-1 w-1 animate-pulse-live rounded-full bg-live" />
-              live
+    <div className="pointer-events-auto flex items-center gap-2 rounded-md border border-border bg-surface/90 px-2 py-1.5 backdrop-blur">
+      <span className="text-[10px] uppercase tracking-wider text-text-muted">verbos</span>
+      {verbsOrder.map((v) => {
+        const m = verbMeta[v]
+        return (
+          <span key={v} className="flex items-center gap-1">
+            <span className={`h-2 w-2 rounded-sm ${m.swatch}`} />
+            <span className={`text-[10.5px] font-semibold uppercase tracking-wider ${m.text}`}>
+              {m.label}
             </span>
-          )}
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
+function Canvas({
+  selectedId,
+  onSelect,
+  onJumpToVerb,
+}: {
+  selectedId: string | null
+  onSelect: (id: string) => void
+  onJumpToVerb: (v: Verb) => void
+}) {
+  const failedStep = steps.find((s) => s.status === 'failed')
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <div className="relative w-full max-w-[320px]">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-text-muted" />
+          <input
+            type="text"
+            placeholder="buscar step, tool, sensor, verbo…"
+            className="h-8 w-full rounded-md border border-border bg-surface pl-7 pr-10 text-[11.5px] placeholder:text-text-muted focus:border-border-strong focus:outline-none"
+          />
+          <kbd className="absolute right-2 top-1/2 -translate-y-1/2 rounded border border-border bg-bg px-1 font-mono text-[9.5px] text-text-muted">
+            ⌘K
+          </kbd>
         </div>
-        <ChevronDown className={`h-3.5 w-3.5 text-text-muted transition ${open ? 'rotate-0' : '-rotate-90'}`} />
-      </button>
-      {open && children}
+        <div className="flex-1">
+          <PhaseStrip onJump={onJumpToVerb} />
+        </div>
+      </div>
+
+      <div
+        className="relative overflow-auto rounded-lg border border-border bg-[#0F1014]"
+        style={{
+          backgroundImage: 'radial-gradient(circle at 1px 1px, #1c1d22 1px, transparent 0)',
+          backgroundSize: '18px 18px',
+          minHeight: CANVAS_H + 8,
+        }}
+      >
+        <div className="relative" style={{ width: CANVAS_W, height: CANVAS_H }}>
+          <EdgeLayer selectedId={selectedId} />
+          {steps.map((s, i) => (
+            <StepNode
+              key={s.id}
+              step={s}
+              idx={i}
+              selected={selectedId === s.id}
+              onClick={() => onSelect(s.id)}
+            />
+          ))}
+        </div>
+
+        {failedStep && (
+          <div className="pointer-events-none absolute left-3 right-3 top-3 z-10 flex justify-center">
+            <div className="pointer-events-auto inline-flex items-center gap-2 rounded-md border border-failure/40 bg-failure/10 px-3 py-1.5 text-[11.5px] text-failure backdrop-blur">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              Falhou em <span className="font-mono">{failedStep.id}</span> · abrir detalhes
+            </div>
+          </div>
+        )}
+
+        {/* Minimap top-left */}
+        <div className="pointer-events-none sticky top-3 z-10 flex items-start justify-between px-3">
+          <div className="pointer-events-auto rounded-md border border-border bg-surface/90 p-2 backdrop-blur">
+            <div className="mb-1.5 flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-text-muted">
+              <Map className="h-3 w-3" />
+              mini-mapa
+            </div>
+            <div className="relative h-10 w-44 rounded border border-border bg-bg">
+              {steps.map((s, i) => {
+                const meta = verbMeta[s.verb]
+                const mx = ((nodeX(i) - nodeX(0)) / (nodeX(steps.length - 1) + NODE_W - nodeX(0))) * 168 + 2
+                return (
+                  <span
+                    key={s.id}
+                    className={`absolute top-1/2 h-3 w-2 -translate-y-1/2 rounded-sm ${meta.swatch}`}
+                    style={{ left: mx }}
+                  />
+                )
+              })}
+              <span className="absolute inset-y-1 left-1 right-1 rounded border border-info/60" />
+            </div>
+          </div>
+
+          {/* Legend + Toolbar top-right */}
+          <div className="pointer-events-auto flex flex-col items-end gap-1.5">
+            <Legend />
+            <div className="flex items-center gap-1 rounded-md border border-border bg-surface/90 p-1 backdrop-blur">
+              <button title="Zoom out" className="rounded p-1 text-text-secondary hover:bg-bg hover:text-text-primary">
+                <Minus className="h-3.5 w-3.5" />
+              </button>
+              <span className="font-mono text-[10px] text-text-muted">100%</span>
+              <button title="Zoom in" className="rounded p-1 text-text-secondary hover:bg-bg hover:text-text-primary">
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+              <span className="mx-0.5 h-4 w-px bg-border" />
+              <button title="Fit to screen (f)" className="rounded p-1 text-text-secondary hover:bg-bg hover:text-text-primary">
+                <Maximize2 className="h-3.5 w-3.5" />
+              </button>
+              <button title="Reset (0)" className="rounded p-1 text-text-secondary hover:bg-bg hover:text-text-primary">
+                <RotateCw className="h-3.5 w-3.5" />
+              </button>
+              <button title="Configurar" className="rounded p-1 text-text-secondary hover:bg-bg hover:text-text-primary">
+                <Settings className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function BottomSheet({
+  stepId,
+  onClose,
+}: {
+  stepId: string
+  onClose: () => void
+}) {
+  const step = steps.find((s) => s.id === stepId)
+  const [iter, setIter] = useState(1)
+  if (!step) return null
+  const verb = verbMeta[step.verb]
+  const VerbIcon = verb.icon
+  const isIterated = (step.iterations ?? 1) > 1
+
+  return (
+    <section className="rounded-lg border border-border bg-surface">
+      <div className="flex flex-col gap-2 border-b border-border px-4 py-3">
+        <div className="flex items-center justify-center">
+          <span className="flex h-1 w-10 cursor-row-resize items-center justify-center rounded-full bg-border" aria-label="redimensionar">
+            <GripHorizontal className="h-3 w-3 text-text-muted" />
+          </span>
+        </div>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-start gap-3 min-w-0">
+            <StatusIcon status={step.status} />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="truncate text-[14px] font-semibold text-text-primary">{step.name}</h3>
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wide ${verb.border} ${verb.bodyBg} ${verb.text}`}
+                >
+                  <VerbIcon className="h-3 w-3" />
+                  {verb.label}
+                </span>
+                {step.duration && (
+                  <span className="font-mono text-[11px] text-text-muted">duração · {step.duration}</span>
+                )}
+              </div>
+              <div className="mt-0.5 flex items-center gap-1.5 text-[10.5px] uppercase tracking-wider text-text-muted">
+                <span className={verb.text}>{verb.label}</span>
+                <ChevronRight className="h-3 w-3" />
+                <span className="font-mono normal-case tracking-normal text-text-secondary">{step.tool ?? step.id}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {isIterated && (
+              <div className="flex items-center gap-1 rounded-md border border-border bg-bg px-1.5 py-1">
+                <span className="mr-1 text-[10px] uppercase tracking-wider text-text-muted">iter</span>
+                {Array.from({ length: step.iterations! }).map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setIter(i + 1)}
+                    className={`rounded px-1.5 py-0.5 font-mono text-[10.5px] transition ${
+                      iter === i + 1
+                        ? 'bg-accent/15 text-accent'
+                        : 'text-text-secondary hover:bg-surface hover:text-text-primary'
+                    }`}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
+              </div>
+            )}
+            <button className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-bg px-2 text-[11.5px] text-text-secondary hover:text-text-primary">
+              <FileText className="h-3.5 w-3.5" />
+              Ver raw trace
+            </button>
+            <button className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-bg px-2 text-[11.5px] text-text-secondary hover:text-text-primary">
+              Pular para Replay
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={onClose}
+              aria-label="fechar"
+              className="rounded p-1 text-text-muted hover:bg-bg hover:text-text-primary"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 divide-border md:grid-cols-2 md:divide-x lg:grid-cols-4">
+        <SheetCol title="Input">
+          <pre className="overflow-x-auto rounded bg-[#0B0C10] p-2.5 font-mono text-[10.5px] leading-relaxed text-text-secondary">
+{`{
+  "sa_id": "ssa-pix-core",
+  "target_env": "hml",
+  "image": "ghcr.io/itau/ssa-pix-core:0.21.4",
+  "replicas": 3
+}`}
+          </pre>
+        </SheetCol>
+
+        <SheetCol title="Output">
+          {step.status === 'pending' || step.status === 'skipped' ? (
+            <div className="text-[11.5px] text-text-muted">Sem output — step ainda não executou.</div>
+          ) : (
+            <pre className="overflow-x-auto rounded bg-[#0B0C10] p-2.5 font-mono text-[10.5px] leading-relaxed text-text-secondary">
+{`{
+  "release_id": "rel-9f3a",
+  "endpoint": "https://pix-core.itau.internal",
+  "artifacts": [
+    "s3://itau-deploys/rel-9f3a/manifest.yaml"
+  ]
+}`}
+            </pre>
+          )}
+        </SheetCol>
+
+        <SheetCol title="Sensores">
+          {step.sensor ? (
+            <ul className="space-y-1.5">
+              <li className="flex items-center justify-between rounded border border-border bg-bg px-2.5 py-1.5">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="h-3.5 w-3.5 text-text-muted" />
+                  <span className="font-mono text-[11.5px] text-text-primary">{step.sensor.name}</span>
+                </div>
+                <span
+                  className={`rounded border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider ${
+                    step.sensor.verdict === 'pass'
+                      ? 'border-success/30 bg-success/10 text-success'
+                      : step.sensor.verdict === 'warn'
+                      ? 'border-warning/30 bg-warning/10 text-warning'
+                      : 'border-failure/30 bg-failure/10 text-failure'
+                  }`}
+                >
+                  {step.sensor.verdict}
+                </span>
+              </li>
+            </ul>
+          ) : (
+            <div className="text-[11.5px] text-text-muted">Nenhum sensor acionado neste step.</div>
+          )}
+        </SheetCol>
+
+        <SheetCol title="Decisão do agente">
+          <div className="space-y-2 text-[11.5px] text-text-secondary">
+            <p>
+              Selecionado <span className="font-mono text-text-primary">kaptain.deploy</span> em vez de{' '}
+              <span className="font-mono">kaptain.bootstrap</span>: a SA já possui release anterior — bootstrap só se aplica em primeira execução.
+            </p>
+            <div className="rounded border border-border bg-bg px-2.5 py-2">
+              <div className="text-[10.5px] uppercase tracking-wider text-text-muted">alternatives_considered</div>
+              <ul className="mt-1 list-disc pl-4 text-[11px]">
+                <li><span className="font-mono">kaptain.bootstrap</span> — rejeitado (sa já provisionada)</li>
+                <li><span className="font-mono">orkestra.apply</span> direto — rejeitado (precisa de release id)</li>
+              </ul>
+            </div>
+          </div>
+        </SheetCol>
+      </div>
+    </section>
+  )
+}
+
+function SheetCol({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="flex max-h-[420px] flex-col gap-2 overflow-hidden px-4 py-3">
+      <div className="text-[10.5px] uppercase tracking-wider text-text-muted">{title}</div>
+      <div className="flex-1 overflow-y-auto">{children}</div>
+    </div>
+  )
+}
+
+function ToolCallsTab() {
+  const rows = [
+    { ts: '0s', tool: 'github.clone', step: 'step-1', status: 'success' as StepStatus, dur: '12s' },
+    { ts: '12s', tool: 'konstructor.build', step: 'step-2 · iter 1', status: 'failed' as StepStatus, dur: '34s' },
+    { ts: '46s', tool: 'konstructor.build', step: 'step-2 · iter 2', status: 'failed' as StepStatus, dur: '38s' },
+    { ts: '1m 24s', tool: 'konstructor.build', step: 'step-2 · iter 3', status: 'success' as StepStatus, dur: '35s' },
+    { ts: '1m 59s', tool: 'konstructor.sbom', step: 'step-3', status: 'success' as StepStatus, dur: '24s' },
+    { ts: '2m 23s', tool: 'komply.evaluate', step: 'step-4', status: 'success' as StepStatus, dur: '8s' },
+    { ts: '2m 31s', tool: 'kaptain.deploy', step: 'step-5', status: 'running' as StepStatus, dur: '2m 14s' },
+  ]
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-surface">
+      <table className="w-full text-[12.5px]">
+        <thead>
+          <tr className="border-b border-border bg-[#101115] text-left text-[11px] uppercase tracking-wider text-text-muted">
+            <th className="px-4 py-2.5 font-medium">t</th>
+            <th className="px-4 py-2.5 font-medium">Tool</th>
+            <th className="px-4 py-2.5 font-medium">Step</th>
+            <th className="px-4 py-2.5 font-medium">Status</th>
+            <th className="px-4 py-2.5 font-medium text-right">Duração</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className="border-b border-border last:border-b-0 hover:bg-[#181A1F]">
+              <td className="px-4 py-2.5 font-mono text-text-muted">{r.ts}</td>
+              <td className="px-4 py-2.5 font-mono text-text-primary">{r.tool}</td>
+              <td className="px-4 py-2.5 font-mono text-text-secondary">{r.step}</td>
+              <td className="px-4 py-2.5">
+                <StatusIcon status={r.status} />
+              </td>
+              <td className="px-4 py-2.5 text-right font-mono text-text-secondary">{r.dur}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function SensorsTab() {
+  const rows = [
+    { sensor: 'cve-scan-deps', step: 'step-3', verdict: 'pass', detail: '0 critical · 2 high (whitelisted)' },
+    { sensor: 'policy-gate', step: 'step-4', verdict: 'pass', detail: 'network egress: ok · komply v1.4.0' },
+    { sensor: 'slo-baseline', step: 'step-5', verdict: 'warn', detail: 'p95 acima do baseline em hml' },
+  ]
+  return (
+    <div className="space-y-2">
+      {rows.map((r, i) => (
+        <div key={i} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface px-4 py-3">
+          <div className="flex items-center gap-3">
+            <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[#181A1F] text-text-secondary">
+              <ShieldCheck className="h-3.5 w-3.5" />
+            </span>
+            <div>
+              <div className="font-mono text-[12.5px] text-text-primary">{r.sensor}</div>
+              <div className="text-[11.5px] text-text-muted">{r.detail}</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[11px] text-text-muted">{r.step}</span>
+            <span
+              className={`rounded border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider ${
+                r.verdict === 'pass'
+                  ? 'border-success/30 bg-success/10 text-success'
+                  : r.verdict === 'warn'
+                  ? 'border-warning/30 bg-warning/10 text-warning'
+                  : 'border-failure/30 bg-failure/10 text-failure'
+              }`}
+            >
+              {r.verdict}
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function AuditTab() {
+  const rows = [
+    { kind: 'approval', who: 'Luigi · LL', what: 'Aprovou policy override · network egress', step: 'step-4', ago: '8min' },
+    { kind: 'policy', who: 'komply', what: 'Policy evaluation passed', step: 'step-4', ago: '8min' },
+    { kind: 'approval', who: 'aguardando · MR', what: 'Aprovar traffic-shift 50%', step: 'step-9', ago: '—' },
+  ]
+  return (
+    <ol className="space-y-2">
+      {rows.map((r, i) => (
+        <li key={i} className="flex items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3">
+          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-warning/15 text-warning">
+            {r.kind === 'approval' ? <Clock3 className="h-3.5 w-3.5" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-[12.5px] text-text-primary">{r.what}</div>
+            <div className="text-[11.5px] text-text-muted">
+              {r.who} · <span className="font-mono">{r.step}</span>
+            </div>
+          </div>
+          <span className="font-mono text-[11px] text-text-muted">{r.ago}</span>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+function ReplayTab() {
+  return (
+    <div className="rounded-lg border border-border bg-surface px-5 py-6">
+      <div className="flex items-center gap-2">
+        <RotateCw className="h-4 w-4 text-accent" />
+        <h3 className="text-[14px] font-semibold tracking-tight">Estado capturado</h3>
+      </div>
+      <p className="mt-1.5 max-w-[640px] text-[12.5px] text-text-secondary">
+        Snapshot completo de inputs, outputs e contexto dos motores. Use para re-executar o workflow a partir de qualquer step.
+      </p>
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="rounded-md border border-border bg-bg px-3 py-2.5">
+          <div className="text-[10.5px] uppercase tracking-wider text-text-muted">snapshot</div>
+          <div className="mt-0.5 font-mono text-[12.5px] text-text-primary">snap-9f3a4c</div>
+        </div>
+        <div className="rounded-md border border-border bg-bg px-3 py-2.5">
+          <div className="text-[10.5px] uppercase tracking-wider text-text-muted">tamanho</div>
+          <div className="mt-0.5 font-mono text-[12.5px] text-text-primary">12.4 MB</div>
+        </div>
+        <div className="rounded-md border border-border bg-bg px-3 py-2.5">
+          <div className="text-[10.5px] uppercase tracking-wider text-text-muted">capturado em</div>
+          <div className="mt-0.5 font-mono text-[12.5px] text-text-primary">há 4min</div>
+        </div>
+      </div>
+      <div className="mt-4 flex items-center gap-2">
+        <button className="inline-flex h-8 items-center gap-1.5 rounded-md bg-accent px-3 text-[12px] font-medium text-black hover:bg-accent-hover">
+          <Play className="h-3.5 w-3.5" />
+          Re-executar do step…
+        </button>
+        <button className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-bg px-3 text-[12px] text-text-secondary hover:text-text-primary">
+          <Download className="h-3.5 w-3.5" />
+          Baixar snapshot
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function CostTab() {
+  const rows = [
+    { step: 'step-1', tool: 'github.clone', tokens: 0, brl: 0.0, latency: '12s' },
+    { step: 'step-2', tool: 'konstructor.build', tokens: 24800, brl: 0.42, latency: '1m 47s' },
+    { step: 'step-3', tool: 'konstructor.sbom', tokens: 1240, brl: 0.04, latency: '24s' },
+    { step: 'step-4', tool: 'komply.evaluate', tokens: 8200, brl: 0.18, latency: '8s' },
+    { step: 'step-5', tool: 'kaptain.deploy', tokens: 11900, brl: 0.27, latency: '2m 14s (em curso)' },
+  ]
+  const totalTokens = rows.reduce((a, b) => a + b.tokens, 0)
+  const totalBrl = rows.reduce((a, b) => a + b.brl, 0)
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="rounded-lg border border-border bg-surface px-4 py-3">
+          <div className="text-[10.5px] uppercase tracking-wider text-text-muted">tokens</div>
+          <div className="mt-0.5 font-mono text-[20px] text-text-primary">{totalTokens.toLocaleString()}</div>
+        </div>
+        <div className="rounded-lg border border-border bg-surface px-4 py-3">
+          <div className="text-[10.5px] uppercase tracking-wider text-text-muted">custo estimado</div>
+          <div className="mt-0.5 font-mono text-[20px] text-text-primary">R$ {totalBrl.toFixed(2)}</div>
+        </div>
+        <div className="rounded-lg border border-border bg-surface px-4 py-3">
+          <div className="text-[10.5px] uppercase tracking-wider text-text-muted">latência total</div>
+          <div className="mt-0.5 font-mono text-[20px] text-text-primary">4m 39s</div>
+        </div>
+      </div>
+      <div className="overflow-hidden rounded-lg border border-border bg-surface">
+        <table className="w-full text-[12.5px]">
+          <thead>
+            <tr className="border-b border-border bg-[#101115] text-left text-[11px] uppercase tracking-wider text-text-muted">
+              <th className="px-4 py-2.5 font-medium">Step</th>
+              <th className="px-4 py-2.5 font-medium">Tool</th>
+              <th className="px-4 py-2.5 font-medium text-right">Tokens</th>
+              <th className="px-4 py-2.5 font-medium text-right">R$</th>
+              <th className="px-4 py-2.5 font-medium text-right">Latência</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i} className="border-b border-border last:border-b-0 hover:bg-[#181A1F]">
+                <td className="px-4 py-2.5 font-mono text-text-primary">{r.step}</td>
+                <td className="px-4 py-2.5 font-mono text-text-secondary">{r.tool}</td>
+                <td className="px-4 py-2.5 text-right font-mono text-text-secondary">{r.tokens.toLocaleString()}</td>
+                <td className="px-4 py-2.5 text-right font-mono text-text-secondary">R$ {r.brl.toFixed(2)}</td>
+                <td className="px-4 py-2.5 text-right font-mono text-text-muted">{r.latency}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+export default function WorkflowTrackerDetail() {
+  const { id } = useParams<{ id: string }>()
+  const [tab, setTab] = useState<TabKey>('fluxo')
+  const [selectedId, setSelectedId] = useState<string | null>('step-5')
+
+  const wfId = id ?? 'wf-abc123'
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center gap-1.5 text-[11.5px] text-text-muted">
+        <Link to="/workflows" className="hover:text-text-primary">
+          Workflow Tracker
+        </Link>
+        <ChevronRight className="h-3 w-3" />
+        <span className="font-mono text-text-secondary">{wfId}</span>
+      </div>
+
+      <header className="rounded-lg border border-border bg-surface px-5 py-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <WorkflowIcon className="h-4 w-4 text-accent" />
+              <h1 className="font-mono text-[20px] text-text-primary">{wfId}</h1>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-info/30 bg-info/10 px-2.5 py-1 text-[11.5px] font-medium uppercase tracking-wide text-info">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                running
+              </span>
+              <span className="flex items-center gap-1.5 rounded-full border border-live/30 bg-live/10 px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wide text-live">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full animate-pulse-live rounded-full bg-live opacity-80" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-live" />
+                </span>
+                live · updated 1s ago
+              </span>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-text-muted">
+              <span className="rounded border border-border bg-bg px-1.5 py-0.5 font-mono text-[10.5px]">onboarding-vanilla-brownfield</span>
+              <span>·</span>
+              <span className="font-mono">ssa-pix-core</span>
+              <span>·</span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-accent/25 text-[9.5px] font-medium text-accent">
+                  LL
+                </span>
+                Luigi
+              </span>
+              <span>·</span>
+              <span>iniciado há 4min 21s</span>
+              <span>·</span>
+              <span className="font-mono">duração 4m 39s</span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-bg px-3 text-[12px] text-text-secondary hover:text-text-primary">
+              <RotateCw className="h-3.5 w-3.5" />
+              Replay
+            </button>
+            <button className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-bg px-3 text-[12px] text-text-secondary hover:text-text-primary">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              Annotate as failure
+            </button>
+            <button className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-bg px-3 text-[12px] text-text-secondary hover:text-text-primary">
+              <Download className="h-3.5 w-3.5" />
+              Export trace
+            </button>
+            <button
+              aria-label="mais opções"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-bg text-text-secondary hover:text-text-primary"
+            >
+              <MoreHorizontal className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <nav className="flex flex-wrap items-center gap-1.5 border-b border-border">
+        {tabs.map((t) => {
+          const active = t.id === tab
+          return (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`-mb-px flex items-center gap-2 border-b-2 px-3 py-2.5 text-[12.5px] transition ${
+                active
+                  ? 'border-accent text-text-primary'
+                  : 'border-transparent text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              {t.label}
+              {typeof t.count === 'number' && (
+                <span
+                  className={`rounded-full px-1.5 py-0.5 font-mono text-[10px] ${
+                    active ? 'bg-accent/15 text-accent' : 'bg-bg text-text-muted'
+                  }`}
+                >
+                  {t.count}
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </nav>
+
+      {tab === 'fluxo' && (
+        <section className="space-y-4">
+          <Canvas
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            onJumpToVerb={() => {
+              /* in a wireframe; would pan canvas */
+            }}
+          />
+          {selectedId && <BottomSheet stepId={selectedId} onClose={() => setSelectedId(null)} />}
+        </section>
+      )}
+
+      {tab === 'tools' && <ToolCallsTab />}
+      {tab === 'sensors' && <SensorsTab />}
+      {tab === 'audit' && <AuditTab />}
+      {tab === 'replay' && <ReplayTab />}
+      {tab === 'cost' && <CostTab />}
     </div>
   )
 }

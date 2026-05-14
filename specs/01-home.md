@@ -16,17 +16,7 @@ Layout:
 \- Botão primário: "+ Onboardar nova SA"
 
 
-\## Seção 2 — Lista de tarefas (1 coluna)
-
-\- Título: "Suas tarefas" + Botão com color primary CTA com texto de "Integrar com UIClick"
-
-\- Lista com 3 itens de todo-list, cada um com:
-
-&#x20; - Checkbox para marcar como concluído
-
-&#x20; - Ícone do tipo de tarefa (PR, aprovação Komply, validação de SLO, etc.)
-
-&#x20; - Título + detalhe (SA / contexto) + Botão com CTA color primary
+\## Seção 2 — Gere um card com base no "./onboarding-card.md"
 
 
 \## Seção 3 — Resumo de pontos de atenção (2 colunas)

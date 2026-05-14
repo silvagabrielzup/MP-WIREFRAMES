@@ -1,20 +1,8 @@
 import { Link } from 'react-router-dom'
 import {
   ChevronRight,
-  Activity,
   ArrowRight,
   Search,
-  CheckCircle2,
-  AlertTriangle,
-  XCircle,
-  Rocket,
-  ShieldCheck,
-  Hammer,
-  Container,
-  Network,
-  Database,
-  ArrowLeftRight,
-  Layers,
 } from 'lucide-react'
 
 type HealthStatus = 'healthy' | 'warn' | 'fail'
@@ -131,90 +119,6 @@ const apps: App[] = [
   },
 ]
 
-type ControlPlane = {
-  id: string
-  name: string
-  description: string
-  status: 'ok' | 'degraded' | 'down'
-  icon: typeof Rocket
-  runs7d: number
-  successRate: number
-  lastCheck: string
-}
-
-const controlPlanes: ControlPlane[] = [
-  {
-    id: 'kaptain',
-    name: 'Kaptain',
-    description: 'CD / AWS',
-    status: 'ok',
-    icon: Rocket,
-    runs7d: 1284,
-    successRate: 98.7,
-    lastCheck: '12s',
-  },
-  {
-    id: 'komply',
-    name: 'Komply',
-    description: 'Policies',
-    status: 'ok',
-    icon: ShieldCheck,
-    runs7d: 2150,
-    successRate: 99.4,
-    lastCheck: '18s',
-  },
-  {
-    id: 'konstructor',
-    name: 'Konstructor',
-    description: 'Build',
-    status: 'ok',
-    icon: Hammer,
-    runs7d: 3420,
-    successRate: 97.9,
-    lastCheck: '9s',
-  },
-  {
-    id: 'orkestra',
-    name: 'Orkestra',
-    description: 'Kubernetes',
-    status: 'degraded',
-    icon: Container,
-    runs7d: 890,
-    successRate: 94.2,
-    lastCheck: '34s',
-  },
-  {
-    id: 'traffik',
-    name: 'Traffik',
-    description: 'Routing / DNS',
-    status: 'ok',
-    icon: Network,
-    runs7d: 540,
-    successRate: 99.8,
-    lastCheck: '6s',
-  },
-  {
-    id: 'pantheon',
-    name: 'Pantheon',
-    description: 'Kafka',
-    status: 'degraded',
-    icon: Database,
-    runs7d: 1740,
-    successRate: 91.6,
-    lastCheck: '2min',
-  },
-  {
-    id: 'migration',
-    name: 'Migration',
-    description: 'Data migration',
-    status: 'ok',
-    icon: ArrowLeftRight,
-    runs7d: 92,
-    successRate: 96.3,
-    lastCheck: '47s',
-  },
-]
-
 const healthMeta: Record<
   HealthStatus,
   { dot: string; label: string; text: string; pill: string }
@@ -236,27 +140,6 @@ const healthMeta: Record<
     label: 'fail',
     text: 'text-failure',
     pill: 'border-failure/30 bg-failure/10 text-failure',
-  },
-}
-
-const cpStatusMeta: Record<
-  ControlPlane['status'],
-  { dot: string; pill: string; icon: typeof CheckCircle2 }
-> = {
-  ok: {
-    dot: 'bg-success',
-    pill: 'border-success/30 bg-success/10 text-success',
-    icon: CheckCircle2,
-  },
-  degraded: {
-    dot: 'bg-warning',
-    pill: 'border-warning/30 bg-warning/10 text-warning',
-    icon: AlertTriangle,
-  },
-  down: {
-    dot: 'bg-failure',
-    pill: 'border-failure/30 bg-failure/10 text-failure',
-    icon: XCircle,
   },
 }
 
@@ -427,74 +310,6 @@ export default function ApplicationHub() {
         </div>
       </section>
 
-      <section>
-        <div className="mb-3 flex items-center gap-2.5">
-          <Layers className="h-3.5 w-3.5 text-text-muted" />
-          <h2 className="text-[15px] font-semibold tracking-tight">Saúde dos control planes</h2>
-          <span className="flex items-center gap-1.5 rounded-full border border-live/30 bg-live/10 px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wide text-live">
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="absolute inline-flex h-full w-full animate-pulse-live rounded-full bg-live opacity-80" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-live" />
-            </span>
-            live
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {controlPlanes.map((cp) => {
-            const Icon = cp.icon
-            const StatusIcon = cpStatusMeta[cp.status].icon
-            const meta = cpStatusMeta[cp.status]
-            return (
-              <div
-                key={cp.id}
-                className="rounded-lg border border-border bg-surface px-4 py-3.5 transition hover:border-border-strong"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-start gap-2.5">
-                    <span className="flex h-8 w-8 flex-none items-center justify-center rounded-md bg-[#181A1F] text-text-secondary">
-                      <Icon className="h-4 w-4" />
-                    </span>
-                    <div>
-                      <div className="text-[13.5px] font-semibold tracking-tight">{cp.name}</div>
-                      <div className="text-[11.5px] text-text-muted">{cp.description}</div>
-                    </div>
-                  </div>
-                  <span
-                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wide ${meta.pill}`}
-                  >
-                    <StatusIcon className="h-3 w-3" />
-                    {cp.status}
-                  </span>
-                </div>
-
-                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                  <div>
-                    <div className="font-mono text-[14px] text-text-primary">{cp.runs7d}</div>
-                    <div className="text-[10px] uppercase tracking-wider text-text-muted">runs 7d</div>
-                  </div>
-                  <div>
-                    <div className="font-mono text-[14px] text-text-primary">{cp.successRate.toFixed(1)}%</div>
-                    <div className="text-[10px] uppercase tracking-wider text-text-muted">sucesso</div>
-                  </div>
-                  <div>
-                    <div className="font-mono text-[14px] text-text-secondary">{cp.lastCheck}</div>
-                    <div className="text-[10px] uppercase tracking-wider text-text-muted">há</div>
-                  </div>
-                </div>
-
-                <div className="mt-3 flex items-center justify-between border-t border-border pt-2.5 text-[11.5px] text-text-muted">
-                  <span className="inline-flex items-center gap-1">
-                    <Activity className="h-3 w-3" />
-                    pings 1m
-                  </span>
-                  <button className="text-text-secondary hover:text-text-primary">detalhe operacional</button>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </section>
     </div>
   )
 }

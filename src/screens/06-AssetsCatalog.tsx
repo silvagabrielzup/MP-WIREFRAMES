@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import {
   ChevronRight,
+  ChevronDown,
   Workflow as WorkflowIcon,
   Sparkles,
   Plug,
@@ -8,7 +9,6 @@ import {
   Cable,
   ArrowRight,
   CheckCircle2,
-  Circle,
   GitBranch,
   Tag,
   Database,
@@ -519,15 +519,36 @@ function DependencyRow({
   )
 }
 
-function WorkflowDetail({ wf }: { wf: WorkflowAsset }) {
+function WorkflowItem({
+  wf,
+  expanded,
+  onToggle,
+}: {
+  wf: WorkflowAsset
+  expanded: boolean
+  onToggle: () => void
+}) {
   return (
-    <div className="rounded-lg border border-border bg-surface">
-      <div className="border-b border-border px-5 py-4">
+    <div
+      className={`rounded-lg border bg-surface transition ${
+        expanded ? 'border-accent ring-1 ring-accent/40' : 'border-border'
+      }`}
+    >
+      <button
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className="w-full border-b border-border px-5 py-4 text-left hover:bg-[#181A1F]"
+      >
         <div className="flex items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <WorkflowIcon className="h-4 w-4 text-accent" />
-              <h3 className="font-mono text-[14px] text-text-primary">{wf.name}</h3>
+              <ChevronDown
+                className={`h-3.5 w-3.5 flex-none text-text-muted transition-transform ${
+                  expanded ? 'rotate-0' : '-rotate-90'
+                }`}
+              />
+              <WorkflowIcon className="h-4 w-4 flex-none text-accent" />
+              <h3 className="truncate font-mono text-[14px] text-text-primary">{wf.name}</h3>
               <StatusBadge status={wf.status} />
               <span className="rounded border border-border bg-bg px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-text-muted">
                 {wf.type}
@@ -535,14 +556,22 @@ function WorkflowDetail({ wf }: { wf: WorkflowAsset }) {
             </div>
             <p className="mt-1.5 max-w-[640px] text-[12.5px] text-text-secondary">{wf.description}</p>
           </div>
-          <button className="inline-flex h-8 items-center gap-1.5 rounded-md bg-accent px-3 text-[12px] font-medium text-black transition hover:bg-accent-hover">
-            Usar workflow
-            <ArrowRight className="h-3.5 w-3.5" />
-          </button>
+          {expanded && (
+            <span
+              role="button"
+              tabIndex={-1}
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-accent px-3 text-[12px] font-medium text-black transition hover:bg-accent-hover"
+            >
+              Usar workflow
+              <ArrowRight className="h-3.5 w-3.5" />
+            </span>
+          )}
         </div>
         <AssetMeta asset={wf} />
-      </div>
+      </button>
 
+      {!expanded ? null : (
       <div className="grid grid-cols-1 gap-5 px-5 py-5 lg:grid-cols-[1.4fr_1fr]">
         <div>
           <div className="mb-2 flex items-center gap-2">
@@ -642,16 +671,26 @@ function WorkflowDetail({ wf }: { wf: WorkflowAsset }) {
           </section>
         </div>
       </div>
+      )}
     </div>
   )
 }
 
 export default function AssetsCatalog() {
   const [tab, setTab] = useState<TabKey>('workflows')
-  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>(migrationWorkflow.id)
+  const workflows: WorkflowAsset[] = [migrationWorkflow]
+  const [expandedWorkflows, setExpandedWorkflows] = useState<Set<string>>(
+    new Set([migrationWorkflow.id]),
+  )
 
-  const selectedWorkflow =
-    selectedWorkflowId === migrationWorkflow.id ? migrationWorkflow : null
+  const toggleWorkflow = (id: string) => {
+    setExpandedWorkflows((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   return (
     <div className="space-y-6">
@@ -700,25 +739,15 @@ export default function AssetsCatalog() {
       </nav>
 
       {tab === 'workflows' && (
-        <section className="space-y-4">
-          <div className="grid grid-cols-1 gap-3">
-            <AssetCard
-              asset={migrationWorkflow}
-              selected={selectedWorkflowId === migrationWorkflow.id}
-              onClick={() => setSelectedWorkflowId(migrationWorkflow.id)}
-              icon={WorkflowIcon}
-              badge={migrationWorkflow.type}
+        <section className="space-y-3">
+          {workflows.map((wf) => (
+            <WorkflowItem
+              key={wf.id}
+              wf={wf}
+              expanded={expandedWorkflows.has(wf.id)}
+              onToggle={() => toggleWorkflow(wf.id)}
             />
-          </div>
-
-          {selectedWorkflow ? (
-            <WorkflowDetail wf={selectedWorkflow} />
-          ) : (
-            <div className="flex items-center gap-2 rounded-md border border-dashed border-border bg-surface/40 px-4 py-3 text-[12px] text-text-muted">
-              <Circle className="h-3.5 w-3.5" />
-              Selecione um workflow para ver os onboarding steps e dependências.
-            </div>
-          )}
+          ))}
         </section>
       )}
 

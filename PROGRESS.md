@@ -4,8 +4,6 @@
 
 - [x] 01-home — Home / Landing (2026-05-12T00:00:00Z) — shell de router + Layout (sidebar/topbar) + Home com hero, workflows live, grid de 7 motores e 2 colunas de atividade
 
-- [ ] 02-workflow-tracker-list — Workflow Tracker: Lista (2026-05-12T00:00:00Z) — tabela densa de 25 workflows com status chips clicáveis, filter bar sticky, mini progress bar em running/awaiting e painel lateral com timeline + sensores + ações . Mostrar somente os workflows que estajam com o status de running , para mostrar outros status , será via filtro 
-
 - [x] 03-workflow-tracker-detail — Workflow Tracker: Detalhe (2026-05-12T00:00:00Z) — header com status live + ações, progress bar dividida pelos 4 verbos, tabs (Timeline/Tools/Sensores/Auditoria/Replay/Custo), timeline em 2 colunas com 13 steps agrupados por Build/Deploy/Migration/Rollout, painel direito sticky com Input/Output/Sensores/Decisão do agente colapsáveis
 
 - [x] 06-assets-catalog — Assets Catalog: Lista de SAs (2026-05-12T00:00:00Z) — breadcrumb + título "Catálogo" com search e CTA "Onboardar SA", 12 chips de tipo de asset com contagens (SAs default), filter bar com toggle ON-PLAT, multi-selects Owner/Tribo, range slider IUConfia, tag chips e toggle grid/tabela; grid 3-col de 22 SAs com card denso (nome+ON-PLAT badge, owner+tribo, donut SVG do IUConfia com delta, 3 mini-stats workflows 7d/deploys 7d/último deploy com status dot, tags) e view alternativa em tabela densa; sidebar direita sticky com Filtros aplicados (chips removíveis), contagem progressiva, distribuição de IUConfia em 3 faixas e atividade recente do catálogo; empty state elegante quando filtros zeram resultados

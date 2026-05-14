@@ -16,27 +16,27 @@ Layout:
 
 \- Barra de filtros (sticky abaixo do header):
 
-&#x20; - Search por workflow\_id, user
-
 &#x20; - Multi-select de status (running, success, failed, awaiting human, cancelled)
 
 \- Tabela densa (não cards):
 
-&#x20; - Colunas: Status badge | Nome | Step atual |Duração | Custo (R$) 
+&#x20; - Colunas: Check verde se o status for success , se o status for de erro um icone de X vermelho , agora para qualquer outro status deixe loading circle spinner amarelo rodando | Nome | Step atual |Duração | Custo (R$) 
 
 &#x20; - Row hover destaca
 
-&#x20; - Status badges com cores:
+&#x20; - Status badges com icone e texto:
 
-&#x20;   - Verde sólido: success
+&#x20;   - Check verde sólido : success 
 
-&#x20;   - Azul pulsante: running
+&#x20;   - Loading Circle Amarelo : awaiting  human
 
-&#x20;   - Vermelho: failed
+&#x20;   - Icone de X vermelho: failed
 
 &#x20;   - Amarelo: awaiting human
 
-&#x20;   - Cinza: cancelled
+&#x20;   - Azul Loading Circle Rodando: running
+
+&#x20;   - Icon Cinza redondo com um linha cortando ao meio: cancelled
 
 &#x20; - Click no row vai pro detalhe
 

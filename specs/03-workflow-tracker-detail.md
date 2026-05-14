@@ -1,102 +1,187 @@
-Gere a tela de detalhe de um workflow (rota: /workflows/\[id]).
+# Tela de detalhe de workflow — visualização em diagrama (rota: /workflows/[id])
 
-Esta é a tela mais importante do produto. Foco em legibilidade da cadeia causal.
+Tela principal do produto. Foco: legibilidade da cadeia causal através de um grafo direcionado horizontal, similar a n8n / GitHub Actions, com identificação dos 4 verbos da Vanilla **por cor**, sem agrupamento visual em swimlanes.
 
-Layout:
+## Layout geral
 
-\- Sidebar + Topbar conforme contexto mestre
+- Sidebar + Topbar conforme contexto mestre
+- Header:
+  - Breadcrumb: `Workflow Tracker / wf-abc123`
+  - Título: ID do workflow + status badge grande
+  - Sub-info: tipo, SA, user (avatar), início, duração
+  - Ações direita: "Replay", "Annotate as failure", "Export trace", botão "..."
+  - Em running: indicador "live · updated 1s ago"
 
-\- Header:
+## Tabs principais
 
-&#x20; - Breadcrumb: Workflow Tracker / wf-abc123
+- **Fluxo** (default) — diagrama do workflow
+- **Tool calls** — todas as chamadas de ferramenta cronológicas
+- **Sensores** — sensores acionados, veredictos, iterações
+- **Auditoria** — aprovações humanas, políticas Komply
+- **Replay** — estado capturado pra re-execução
+- **Custo** — tokens, R$, latência por step
 
-&#x20; - Título: ID do workflow + status badge grande
+## Tab Fluxo (default)
 
-&#x20; - Sub-info: tipo, SA, user (avatar), início, duração
+### Estrutura visual
 
-&#x20; - Ações direita: "Replay", "Annotate as failure", "Export trace", botão "..."
+Layout em duas regiões empilhadas verticalmente:
+- **Canvas** (topo, full-width; ocupa 100% da altura quando o detalhe está fechado, ~55–60% quando aberto)
+- **Painel de detalhe** (bottom sheet, ~40–45% de altura, abre on-click no node)
 
-&#x20; - Em running: indicador "live · updated 1s ago"
+Vantagem: o canvas mantém largura total para o fluxo horizontal — nada é comprimido lateralmente ao abrir o detalhe.
 
-\- Tabs principais:
+### Canvas — grafo direcionado horizontal
 
-&#x20; - \*\*Timeline\*\* (default) — fluxo dos steps
+- Orientação **horizontal, esquerda → direita** (single-axis DAG)
+- Steps representados como **nodes** conectados por **edges**, sem containers ou swimlanes
+- Auto-layout: `dagre` ou `elk.js` com direção `LR` (left-right), camadas alinhadas horizontalmente
+- Zoom + pan livre (scroll-wheel zoom, drag pan)
+- Background com grid sutil
+- Biblioteca de referência: **React Flow / xyflow**
 
-&#x20; - \*\*Tool calls\*\* — todas as chamadas de ferramenta cronológicas
+### Identificação dos verbos por cor (sem swimlanes)
 
-&#x20; - \*\*Sensores\*\* — sensores acionados, veredictos, iterações
+Cada um dos 4 verbos tem uma cor canônica do design system, aplicada diretamente ao node:
+- **Build** → cor A
+- **Deploy** → cor B
+- **Migration** → cor C
+- **Rollout** → cor D
 
-&#x20; - \*\*Auditoria\*\* — aprovações humanas, políticas Komply
+Sinalização do verbo no canvas:
+- **Phase strip** fino no topo do canvas (sticky): barra horizontal proporcional mostrando onde cada fase começa/termina ao longo do fluxo, com label e cor do verbo. Clicar em um segmento dá fit-to-fase. Funciona como minimapa de fases.
+- **Legenda fixa** no canto superior direito (`Build · Deploy · Migration · Rollout`), com os swatches de cor.
+- A própria cor do node identifica o verbo a cada caixa.
 
-&#x20; - \*\*Replay\*\* — estado capturado pra re-execução
+Ordem fixa esquerda → direita: **Build → Deploy → Migration → Rollout**. Verbos sem steps no workflow atual ficam ausentes do phase strip.
 
-&#x20; - \*\*Custo\*\* — tokens, R$, latência por step
+### Nodes (cards de step)
 
-\## Tab Timeline (mais detalhada)
+Dimensões fixas (sugestão: 260 × 96 px), totalmente coloridos pelo verbo:
+- **Header strip** (topo do card, ~28px): cor saturada do verbo, com label do verbo + ícone (ex: `Build · konstructor`)
+- **Body** (fundo): tint claro da cor do verbo (~8–12% opacidade sobre o background) — mantém o pertencimento visível sem prejudicar contraste do texto
+- **Border**: 1px na cor do verbo (mais saturada que o tint do body)
+- Conteúdo do body:
+  - Linha 1: ícone de status + nome do step (truncate)
+  - Linha 2: tool name em mono font (ex: `kaptain.deploy`)
+  - Linha 3 — chips inline: duração, sensor acionado, iterações (`↻ 3`)
+- **Handles** de conexão: input à esquerda, output à direita
 
-\- Layout em 2 colunas:
+Estados visuais (sobrepostos ao esquema de cor do verbo):
+- `pending`: card dessaturado (cor do verbo a ~30%)
+- `running`: borda pulsante na cor do verbo + spinner no ícone de status
+- `success`: cor cheia + check
+- `failed`: borda **vermelha** sobrepõe a cor do verbo + ícone de erro (vermelho sempre vence visualmente)
+- `skipped`: tracejado, dessaturado
+- `selected`: ring/outline destacado (neutro, ex: azul de seleção do design system)
+- `hover`: elevação leve (shadow)
 
-&#x20; - Coluna esquerda (60%): timeline vertical
+### Edges (conexões)
 
-&#x20; - Coluna direita (40%): detalhe do step selecionado
+- Estilo único: curva bezier suave **ou** ortogonal (escolher um e manter consistente)
+- Edges entre verbos diferentes podem ter **gradient da cor de origem → cor de destino** para reforçar o handoff (sutil; opcional, A/B testar)
+- Cor depende do estado do step de destino:
+  - normal: cinza neutro (ou gradient se entre verbos)
+  - caminho que falhou: vermelho
+  - caminho ainda não executado: cinza claro / tracejado
+- **Edges de iteração**: loop-back curvo, label `↻ N×`
+- **Edges condicionais**: tracejado com label (ex: `if sensor.fail`)
+- Animação sutil de fluxo (dashed marching) na edge ativa quando workflow está em running
 
-\### Timeline vertical (coluna esquerda)
+### Iteração / auto-correção
 
-\- Cada step é um card horizontal compacto
+- Default: **uma única node** com chip `↻ N`
+- Click no chip **expande horizontalmente** em N nodes em sequência com edges de loop-back (mantém a tese de fluxo horizontal)
+- No painel de detalhe inferior, navegação entre iterações por tabs: `iter 1` | `iter 2` | ...
 
-\- Steps agrupados pelos 4 verbos da Vanilla com headers:
+### Controles do canvas
 
-&#x20; - "Build" (Konstructor)
+Toolbar flutuante no canto **superior direito** do canvas (movido para fora da área do bottom sheet):
+- Zoom in / out
+- Fit to screen (atalho `f`)
+- Reset zoom (atalho `0`)
+- Toggle minimapa
+- Toggle: expandir/colapsar iterações
+- Toggle: mostrar/esconder edges condicionais não executadas
 
-&#x20; - "Deploy" (Kaptain + Orkestra)
+Removido o toggle horizontal ↔ vertical: o fluxo é sempre horizontal nessa tela.
 
-&#x20; - "Migration" (Migration + Traffik)
+### Minimapa (canto **superior esquerdo**, toggleable)
 
-&#x20; - "Rollout" (Kaptain)
+- Movido para o topo já que o rodapé é o bottom sheet
+- Versão reduzida do grafo com cores dos verbos preservadas
+- Viewport atual destacado
+- Click pula para a região
 
-\- Dentro de cada verbo, sub-steps com:
+### Search bar (acima do canvas, ao lado do phase strip; atalho `cmd/ctrl + k`)
 
-&#x20; - Ícone de status
+- Filtra nodes por nome, tool, status, sensor, verbo
+- Match anima zoom até o primeiro resultado e destaca todos os matches
 
-&#x20; - Nome do step
+### Navegação por teclado
 
-&#x20; - Tool name (se aplicável)
+- `← →`: navegar entre nodes sequenciais no fluxo
+- `↑ ↓`: redimensionar bottom sheet quando aberto (cresce/diminui altura)
+- `Enter` / `Space`: selecionar node, abrir bottom sheet
+- `Esc`: fechar bottom sheet
+- `/` ou `cmd+k`: focar search
+- `f`: fit to screen
 
-&#x20; - Duração
+## Painel de detalhe (bottom sheet)
 
-&#x20; - Indicador de sensor acionado (chip pequeno)
+Abre on-click em qualquer node. Layout horizontal pra aproveitar a largura da tela:
 
-&#x20; - Indicador de iteração (se houve auto-correção: "3 iterações")
+- **Header sticky** (topo do sheet, full-width):
+  - Drag handle (linha central) para resize
+  - Ícone de status + nome do step
+  - Badge do verbo (cor + label)
+  - Duração + breadcrumb (`verbo · step`)
+  - Tabs de iteração (se N > 1): `iter 1` | `iter 2` | ...
+  - Ações direita: "Ver raw trace", "Pular para Replay", botão X (fecha)
+- **Conteúdo em 4 colunas** (aproveita largura, evita scroll vertical excessivo):
+  - **Input** — tool call params, contexto (JSON formatado, syntax-highlighted)
+  - **Output** — tool result, artifacts (JSON + links)
+  - **Sensores** — lista de sensores com veredicto (chip por sensor, hover com detail)
+  - **Decisão do agente** — rationale, `alternatives_considered` (markdown render)
+- Em viewports estreitos (<1280px), colunas viram **tabs horizontais** (Input | Output | Sensores | Decisão)
+- Cada coluna tem scroll interno independente
 
-\- Linha vertical conectando os steps
+Comportamento do bottom sheet:
+- Altura default: 40% do viewport; resizable via drag handle (mín 240px, máx 70% do viewport)
+- Snap points: 25%, 40%, 70%
+- Click fora **mantém** a seleção; fecha só via `Esc` ou X
+- Trocar seleção (click em outro node) atualiza conteúdo sem fechar/reabrir
+- Slide-up 200ms ease-out
+- Estado (aberto/fechado, altura, snap) persistido na URL e no localStorage
 
-\- Step atual em running tem indicador pulsante
+## Estados especiais do canvas
 
-\- Click no step seleciona, mostra detalhe à direita
+- **Workflow vazio**: empty state centralizado com link para docs
+- **Workflow em running**:
+  - Node em execução com borda pulsante
+  - Edge ativa com animação de fluxo
+  - Auto-follow horizontal: o canvas pan automaticamente para manter o node em execução visível (toggleable)
+- **Workflow falhou**:
+  - Caminho até a falha em vermelho, demais edges em cinza
+  - Banner no topo do canvas: "Falhou em `<step>` · abrir detalhes"
+- **Workflow grande (>50 steps)**:
+  - Phase strip permite jump rápido por fase
+  - Botão "Fit phase" na legenda
 
-\### Detalhe do step (coluna direita, sticky)
+## Performance e dados
 
-\- Header do step
+- Streaming via WebSocket quando `status = running`; diff updates (sem re-render do grafo inteiro a cada tick)
+- Virtualização de nodes off-screen para workflows com >100 steps
+- Lazy load do conteúdo do bottom sheet: `input`/`output` podem ser grandes — só fetch ao expandir a coluna correspondente
+- Estado de seleção, zoom, pan e sheet persistido na URL (`?node=step-id&zoom=1.4&sheet=40`) para deep-link e share
 
-\- 4 sub-seções colapsáveis:
+## Estilo
 
-&#x20; - \*\*Input\*\*: o que entrou (tool call params, contexto)
-
-&#x20; - \*\*Output\*\*: o que saiu (tool result, artifacts)
-
-&#x20; - \*\*Sensores\*\*: lista de sensores que rodaram com veredicto
-
-&#x20; - \*\*Decisão do agente\*\*: rationale, alternatives\_considered
-
-\- Botão "Ver raw trace" (abre modal com JSON estruturado)
-
-Estilo:
-
-\- Use cores dos verbos consistentemente
-
-\- Timeline densa mas legível
-
-\- Indicar claramente onde o agente teve que iterar
-
-\- Use mockup realista com pelo menos 8-12 steps através dos 4 verbos
-
+- 4 cores canônicas do design system, uma por verbo — mesma paleta em phase strip, legenda, nodes, edges entre verbos e badge no detail sheet
+- Mono font para tool names, IDs, código; sans para nomes e descrições
+- Contraste de texto sempre verificado contra o tint do verbo (WCAG AA mínimo)
+- Mockup com **8–12 steps através dos 4 verbos**, contendo no mínimo:
+  - 1 step com iteração (chip `↻ N`)
+  - 1 step com sensor acionado
+  - 1 step em running **ou** 1 step falho
+  - 1 edge condicional
