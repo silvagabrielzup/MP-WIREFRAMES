@@ -12,4 +12,4 @@
 
 [x] - No WorkflowTrackerList.tsx , deve ser listado através do WorkflowProvider.tsx 
 
-[ ] - No WorkflowTrackerDetail ,popule essa tela com os dados do workflow selecionado, busque no database.ts , os steps do diagrama use como refer
+<!-- [ ] - No WorkflowTrackerDetail ,popule essa tela com os dados do workflow selecionado, busque no database.ts , os steps do diagrama use como referencia  -->

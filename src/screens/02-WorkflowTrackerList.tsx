@@ -19,8 +19,8 @@ type Status = 'running' | 'success' | 'failed' | 'awaiting' | 'cancelled'
 const statusMeta: Record<Status, { label: string; chip: string; dot: string }> = {
   running: {
     label: 'running',
-    chip: 'border-warning/30 bg-warning/10 text-warning',
-    dot: 'bg-warning',
+    chip: 'border-info/30 bg-info/10 text-info',
+    dot: 'bg-info',
   },
   success: {
     label: 'success',
@@ -53,12 +53,22 @@ function mapStatus(s: WorkflowStatus): Status {
   return 'running'
 }
 
-function StatusIcon({ status, size = 4 }: { status: Status; size?: 4 | 5 }) {
+function StatusIcon({
+  status,
+  size = 4,
+  staticIcon = false,
+}: {
+  status: Status
+  size?: 4 | 5
+  staticIcon?: boolean
+}) {
   const cls = size === 5 ? 'h-5 w-5' : 'h-4 w-4'
   if (status === 'success') return <CheckCircle2 className={`${cls} text-success`} />
   if (status === 'failed') return <XCircle className={`${cls} text-failure`} />
   if (status === 'cancelled') return <CircleSlash className={`${cls} text-text-muted`} />
-  return <Loader2 className={`${cls} animate-spin text-warning`} />
+  if (status === 'running')
+    return <Loader2 className={`${cls} ${staticIcon ? '' : 'animate-spin'} text-info`} />
+  return <Loader2 className={`${cls} text-warning`} />
 }
 
 function formatDuration(startedAt: string): string {
@@ -157,7 +167,7 @@ export default function WorkflowTrackerList() {
                     : 'border-border bg-surface text-text-secondary hover:text-text-primary'
                 }`}
               >
-                <StatusIcon status={s} />
+                <StatusIcon status={s} staticIcon />
                 {m.label}
               </button>
             )
