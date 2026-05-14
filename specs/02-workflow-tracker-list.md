@@ -12,24 +12,17 @@ Layout:
 
 &#x20; - Subtítulo: "Acompanhe execuções agênticas em tempo real"
 
-&#x20; - Indicador "live · 23 ativos"
+&#x20; - Indicador "live · 3 ativos"
 
 \- Barra de filtros (sticky abaixo do header):
 
-&#x20; - Search por workflow\_id, SA, user
-
-&#x20; - Multi-select de SA
+&#x20; - Search por workflow\_id, user
 
 &#x20; - Multi-select de status (running, success, failed, awaiting human, cancelled)
 
-&#x20; - Select de tipo (onboarding-vanilla-brownfield e outros)
-
-&#x20; - Select de tempo (last 1h, 24h, 7d, 30d)
-
-
 \- Tabela densa (não cards):
 
-&#x20; - Colunas: Status badge | Workflow ID | Tipo | Início | Duração | Custo (R$) | Step atual
+&#x20; - Colunas: Status badge | Nome | Step atual |Duração | Custo (R$) 
 
 &#x20; - Row hover destaca
 

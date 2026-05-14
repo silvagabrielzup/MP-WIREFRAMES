@@ -18,7 +18,7 @@ Layout:
 
 \## Seção 2 — Lista de tarefas (1 coluna)
 
-\- Título: "Suas tarefas"
+\- Título: "Suas tarefas" + Botão com color primary CTA com texto de "Integrar com UIClick"
 
 \- Lista com 3 itens de todo-list, cada um com:
 
@@ -26,14 +26,10 @@ Layout:
 
 &#x20; - Ícone do tipo de tarefa (PR, aprovação Komply, validação de SLO, etc.)
 
-&#x20; - Título + detalhe (SA / contexto)
-
-&#x20; - Chip de prioridade (high / medium / low)
-
-&#x20; - Due date relativo ("hoje", "amanhã")
+&#x20; - Título + detalhe (SA / contexto) + Botão com CTA color primary
 
 
-\## Seção 3 — Importante atenção (2 colunas)
+\## Seção 3 — Resumo de pontos de atenção (2 colunas)
 
 \- Coluna esquerda: "Fluxos agenticos pendentes aprovacao"
 
@@ -46,6 +42,12 @@ Layout:
 &#x20; - Workflows com falha últimas 24h
 
 &#x20; - Violações de policy novas
+
+\## Seção 4 — Resumo da saúde da apliação (2 colunas)
+
+\- Título: "Saúde da Aplication Hub"
+
+\- Cards com títulos , nível da saúde da aplicação e botão com CTA para levar a aplicação
 
 
 Estilo:

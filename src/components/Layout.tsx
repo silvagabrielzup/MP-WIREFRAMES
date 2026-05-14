@@ -2,6 +2,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   Activity,
   Boxes,
+  LayoutGrid,
   Search,
   Bell,
   ChevronDown,
@@ -10,6 +11,7 @@ import {
 
 const navItems = [
   { to: '/workflows', label: 'Workflow Tracker', icon: Activity },
+  { to: '/application-hub', label: 'Application Hub', icon: LayoutGrid },
   { to: '/assets', label: 'Assets Catalog', icon: Boxes },
 ]
 
