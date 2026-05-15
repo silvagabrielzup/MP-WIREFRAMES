@@ -433,23 +433,21 @@ function WorkflowItem({
             </div>
             <p className="mt-1.5 max-w-[640px] text-[12.5px] text-text-secondary">{wf.description}</p>
           </div>
-          {expanded && (
-            <span
-              role="button"
-              tabIndex={0}
-              onClick={handleUse}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault()
-                  handleUse(e as unknown as React.MouseEvent)
-                }
-              }}
-              className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md bg-accent px-3 text-[12px] font-medium text-black transition hover:bg-accent-hover"
-            >
-              Usar workflow
-              <ArrowRight className="h-3.5 w-3.5" />
-            </span>
-          )}
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={handleUse}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                handleUse(e as unknown as React.MouseEvent)
+              }
+            }}
+            className="inline-flex h-8 flex-none cursor-pointer items-center gap-1.5 rounded-md bg-accent px-3 text-[12px] font-medium text-black transition hover:bg-accent-hover"
+          >
+            Usar workflow
+            <ArrowRight className="h-3.5 w-3.5" />
+          </span>
         </div>
         <AssetMeta asset={wf} />
       </button>
