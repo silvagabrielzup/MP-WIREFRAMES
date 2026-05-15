@@ -11,8 +11,10 @@ import {
   ChevronsLeft,
   Boxes,
   ArrowRight,
+  Check,
 } from 'lucide-react'
 import { useWorkflows, type WorkflowInstance, type WorkflowStatus } from '../contexts/WorkflowsProvider'
+import { executionTemplateIds } from '../data/database'
 
 type Status = 'running' | 'success' | 'failed' | 'awaiting' | 'cancelled'
 
@@ -94,16 +96,18 @@ const PAGE_SIZE = 6
 
 export default function WorkflowTrackerList() {
   const navigate = useNavigate()
-  const { workflows } = useWorkflows()
-  const [statusFilter, setStatusFilter] = useState<Set<Status>>(new Set())
+  const { workflows, advanceStep } = useWorkflows()
+  const [statusFilter, setStatusFilter] = useState<Set<Status>>(new Set(['running']))
   const [page, setPage] = useState(0)
 
   const rows = useMemo(
     () =>
-      workflows.map((w) => ({
-        instance: w,
-        status: mapStatus(w.status),
-      })),
+      workflows
+        .filter((w) => executionTemplateIds.has(w.templateId))
+        .map((w) => ({
+          instance: w,
+          status: mapStatus(w.status),
+        })),
     [workflows],
   )
 
@@ -194,17 +198,18 @@ export default function WorkflowTrackerList() {
               <Boxes className="h-5 w-5 text-text-muted" />
             </span>
             <h3 className="text-[15px] font-semibold tracking-tight text-text-primary">
-              Nenhum workflow em andamento
+              Nenhuma execução em andamento
             </h3>
             <p className="max-w-[420px] text-[12.5px] text-text-secondary">
-              Quando um workflow do catálogo for iniciado, ele aparece aqui em tempo real.
+              Execuções aparecem aqui quando um workflow de onboarding lança seu pipeline ligado
+              (ex.: ao concluir o step "Lançar workflow de onboarding" na Home).
             </p>
             <Link
-              to="/catalog"
+              to="/"
               className="mt-1 inline-flex h-9 items-center gap-2 rounded-md bg-accent px-4 text-[12.5px] font-medium text-black transition hover:bg-accent-hover"
             >
               <Boxes className="h-4 w-4" />
-              Ir para o Assets Catalog
+              Voltar para a Home
               <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>
@@ -218,12 +223,13 @@ export default function WorkflowTrackerList() {
                   <th className="px-3 py-2.5 font-medium">Step atual</th>
                   <th className="px-3 py-2.5 font-medium text-right">Duração</th>
                   <th className="px-3 py-2.5 font-medium text-right">Custo (R$)</th>
+                  <th className="px-3 py-2.5 font-medium text-right">Ação</th>
                 </tr>
               </thead>
               <tbody>
                 {pageRows.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-12 text-center text-[12px] text-text-muted">
+                    <td colSpan={6} className="px-4 py-12 text-center text-[12px] text-text-muted">
                       Nenhum workflow corresponde aos filtros aplicados.
                     </td>
                   </tr>
@@ -264,6 +270,25 @@ export default function WorkflowTrackerList() {
                           {formatDuration(w.startedAt)}
                         </td>
                         <td className="px-3 py-3 text-right font-mono text-text-muted">—</td>
+                        <td className="px-3 py-3 text-right">
+                          {w.status === 'completed' || w.status === 'failed' ? (
+                            <span className="inline-flex items-center gap-1 text-[10.5px] uppercase tracking-wider text-text-muted">
+                              encerrado
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                advanceStep(w.id)
+                              }}
+                              className="inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent/10 px-2.5 py-1 text-[11.5px] font-medium text-accent transition hover:bg-accent/20"
+                            >
+                              <Check className="h-3 w-3" />
+                              {w.currentStepIndex >= w.steps.length - 1 ? 'Concluir' : 'Avançar'}
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     )
                   })

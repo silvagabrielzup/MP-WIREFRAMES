@@ -1,4 +1,5 @@
-import { Link } from 'react-router-dom'
+import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   ArrowRight,
   ShieldCheck,
@@ -11,9 +12,20 @@ import {
   Check,
   Sparkles,
   Boxes,
+  X,
+  Search,
+  GitBranch,
+  FileCode2,
+  Folder,
+  FolderOpen,
+  ChevronRight,
+  ChevronDown,
+  Plus,
+  Minus,
+  ArrowRightLeft,
 } from 'lucide-react'
 import { useWorkflows } from '../contexts/WorkflowsProvider'
-import { workflows as workflowTemplates } from '../data/database'
+import { executionTemplateIds, workflows as workflowTemplates } from '../data/database'
 
 type StepStatus = 'done' | 'in-progress' | 'not-started'
 
@@ -22,10 +34,9 @@ type OnboardingStep = {
   stepId: string
   title: string
   description: string
-  cta?: string
-  estimate?: string
+  ctaLabel: string
+  completedOnClick: boolean
   status: StepStatus
-  badge?: string
 }
 
 const pendingApprovals: {
@@ -64,21 +75,6 @@ function EmptyState({
   )
 }
 
-function LiveBadge({ ago }: { ago: string }) {
-  return (
-    <>
-      <span className="flex items-center gap-1.5 rounded-full border border-live/30 bg-live/10 px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wide text-live">
-        <span className="relative flex h-1.5 w-1.5">
-          <span className="absolute inline-flex h-full w-full animate-pulse-live rounded-full bg-live opacity-80" />
-          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-live" />
-        </span>
-        live
-      </span>
-      <span className="text-[12px] text-text-muted">atualizado há {ago}</span>
-    </>
-  )
-}
-
 function StepCheckbox({ status }: { status: StepStatus }) {
   if (status === 'done') {
     return (
@@ -100,9 +96,11 @@ function StepCheckbox({ status }: { status: StepStatus }) {
 function OnboardingStepRow({
   step,
   attenuated,
+  onActivate,
 }: {
   step: OnboardingStep
   attenuated: boolean
+  onActivate: (step: OnboardingStep) => void
 }) {
   const isDone = step.status === 'done'
   const isInProgress = step.status === 'in-progress'
@@ -114,16 +112,17 @@ function OnboardingStepRow({
         <span className="flex-1 truncate text-[12.5px] text-text-muted line-through">
           {step.title}
         </span>
-        {step.badge && (
-          <span className="font-mono text-[10.5px] text-text-muted">{step.badge}</span>
-        )}
       </li>
     )
   }
 
+  const canComplete = isInProgress && step.completedOnClick
+  const handleActivate = () => onActivate(step)
+
   return (
     <li
-      className={`flex items-start gap-3 border-b border-border px-4 py-3 last:border-b-0 hover:bg-[#181A1F] ${
+      onClick={handleActivate}
+      className={`flex cursor-pointer items-start gap-3 border-b border-border px-4 py-3 last:border-b-0 hover:bg-[#181A1F] ${
         isInProgress ? 'border-l-2 border-l-accent bg-accent/5' : ''
       } ${attenuated ? 'opacity-80' : ''}`}
     >
@@ -138,34 +137,539 @@ function OnboardingStepRow({
           )}
         </div>
         <div className="mt-0.5 truncate text-[11.5px] text-text-muted">{step.description}</div>
-        {step.badge && (
-          <div className="mt-1 inline-flex items-center gap-1 rounded border border-border bg-bg px-1.5 py-0.5 font-mono text-[10.5px] text-text-secondary">
-            {step.badge}
-          </div>
-        )}
       </div>
       <div className="flex flex-none items-center gap-3">
-        {step.estimate && (
-          <span className="font-mono text-[11px] text-text-muted">{step.estimate}</span>
-        )}
-        {step.cta && (
-          <Link
-            to={step.cta}
-            className="inline-flex items-center gap-1 text-[11.5px] text-text-secondary hover:text-text-primary"
-          >
-            Abrir
-            <ArrowRight className="h-3 w-3" />
-          </Link>
-        )}
         <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            handleActivate()
+          }}
+          className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11.5px] font-medium transition ${
+            canComplete
+              ? 'border-accent/40 bg-accent/10 text-accent hover:bg-accent/20'
+              : 'border-border bg-bg text-text-secondary hover:border-border-strong hover:text-text-primary'
+          }`}
+        >
+          {step.ctaLabel}
+          <ArrowRight className="h-3 w-3" />
+        </button>
+        <button
+          type="button"
           aria-label="opções"
           title="dispensar · marcar como feito · lembrar depois"
+          onClick={(e) => e.stopPropagation()}
           className="flex h-6 w-6 items-center justify-center rounded text-text-muted hover:bg-bg hover:text-text-primary"
         >
           <MoreHorizontal className="h-3.5 w-3.5" />
         </button>
       </div>
     </li>
+  )
+}
+
+const MOCK_REPO = {
+  url: 'git@itau.gitlab.com:apps/pix-core.git',
+  name: 'pix-core',
+  org: 'itau-applications',
+  defaultBranch: 'main',
+  language: 'Java 17 · Spring Boot 3.2',
+  contributors: 14,
+  lastCommit: 'há 2h · feat(payment): retry com backoff exponencial',
+  size: '184 MB',
+  filesCount: '2.418 arquivos',
+  lastTag: 'v3.14.2',
+}
+
+type TreeAction = 'moved' | 'added' | 'removed'
+type TreeNode = {
+  name: string
+  type: 'dir' | 'file'
+  action?: TreeAction
+  defaultOpen?: boolean
+  children?: TreeNode[]
+}
+
+const CURRENT_TREE: TreeNode = {
+  name: 'pix-core',
+  type: 'dir',
+  defaultOpen: true,
+  children: [
+    {
+      name: 'src',
+      type: 'dir',
+      defaultOpen: true,
+      children: [
+        {
+          name: 'main',
+          type: 'dir',
+          defaultOpen: true,
+          children: [
+            {
+              name: 'java',
+              type: 'dir',
+              children: [
+                {
+                  name: 'com.itau.pix',
+                  type: 'dir',
+                  children: [
+                    { name: 'Application.java', type: 'file' },
+                    { name: 'PaymentService.java', type: 'file' },
+                    { name: 'PixController.java', type: 'file' },
+                  ],
+                },
+              ],
+            },
+            {
+              name: 'resources',
+              type: 'dir',
+              children: [
+                { name: 'application.yaml', type: 'file' },
+                { name: 'logback.xml', type: 'file' },
+              ],
+            },
+          ],
+        },
+        { name: 'test', type: 'dir', children: [{ name: 'java', type: 'dir' }] },
+      ],
+    },
+    {
+      name: 'helm',
+      type: 'dir',
+      children: [
+        { name: 'values.yaml', type: 'file' },
+        { name: 'Chart.yaml', type: 'file' },
+      ],
+    },
+    { name: 'pom.xml', type: 'file' },
+    { name: 'Dockerfile', type: 'file' },
+    { name: 'README.md', type: 'file' },
+    { name: '.gitlab-ci.yml', type: 'file', action: 'removed' },
+  ],
+}
+
+const MONOREPO_TREE: TreeNode = {
+  name: 'vanilla-monorepo',
+  type: 'dir',
+  defaultOpen: true,
+  children: [
+    {
+      name: 'apps',
+      type: 'dir',
+      defaultOpen: true,
+      children: [
+        {
+          name: 'ssa-pix-core',
+          type: 'dir',
+          defaultOpen: true,
+          action: 'added',
+          children: [
+            {
+              name: 'src',
+              type: 'dir',
+              defaultOpen: true,
+              action: 'moved',
+              children: [
+                {
+                  name: 'main',
+                  type: 'dir',
+                  action: 'moved',
+                  children: [
+                    {
+                      name: 'java',
+                      type: 'dir',
+                      children: [
+                        {
+                          name: 'com.itau.pix',
+                          type: 'dir',
+                          children: [
+                            { name: 'Application.java', type: 'file' },
+                            { name: 'PaymentService.java', type: 'file' },
+                            { name: 'PixController.java', type: 'file' },
+                          ],
+                        },
+                      ],
+                    },
+                    {
+                      name: 'resources',
+                      type: 'dir',
+                      children: [
+                        { name: 'application.yaml', type: 'file' },
+                        { name: 'logback.xml', type: 'file' },
+                      ],
+                    },
+                  ],
+                },
+                { name: 'test', type: 'dir', action: 'moved', children: [{ name: 'java', type: 'dir' }] },
+              ],
+            },
+            {
+              name: 'helm',
+              type: 'dir',
+              action: 'moved',
+              children: [
+                { name: 'values.yaml', type: 'file' },
+                { name: 'Chart.yaml', type: 'file' },
+              ],
+            },
+            { name: 'pom.xml', type: 'file', action: 'moved' },
+            { name: 'Dockerfile', type: 'file', action: 'moved' },
+            { name: 'README.md', type: 'file', action: 'moved' },
+            { name: 'komply.yaml', type: 'file', action: 'added' },
+            { name: 'kaptain.yaml', type: 'file', action: 'added' },
+            { name: 'orkestra.yaml', type: 'file', action: 'added' },
+          ],
+        },
+      ],
+    },
+    {
+      name: 'tooling',
+      type: 'dir',
+      defaultOpen: true,
+      action: 'added',
+      children: [{ name: 'vanilla.lock', type: 'file', action: 'added' }],
+    },
+  ],
+}
+
+const ACTION_LABEL: Record<TreeAction, string> = {
+  moved: 'mov',
+  added: 'novo',
+  removed: 'remov',
+}
+
+function TreeNodeView({ node, depth = 0 }: { node: TreeNode; depth?: number }) {
+  const [open, setOpen] = useState(node.defaultOpen ?? false)
+  const isDir = node.type === 'dir'
+  const indent = depth * 14 + 6
+
+  const rowTone =
+    node.action === 'added'
+      ? 'border-success/25 bg-success/[0.04]'
+      : node.action === 'removed'
+      ? 'border-failure/25 bg-failure/[0.04]'
+      : node.action === 'moved'
+      ? 'border-info/25 bg-info/[0.04]'
+      : 'border-transparent hover:bg-bg/60'
+
+  const nameTone =
+    node.action === 'removed'
+      ? 'text-failure line-through'
+      : node.action === 'added'
+      ? 'text-success'
+      : node.action === 'moved'
+      ? 'text-info'
+      : 'text-text-secondary'
+
+  const badgeTone =
+    node.action === 'added'
+      ? 'bg-success/15 text-success'
+      : node.action === 'removed'
+      ? 'bg-failure/15 text-failure'
+      : 'bg-info/15 text-info'
+
+  return (
+    <>
+      <div
+        role={isDir ? 'button' : undefined}
+        aria-expanded={isDir ? open : undefined}
+        onClick={isDir ? () => setOpen((v) => !v) : undefined}
+        style={{ paddingLeft: `${indent}px` }}
+        className={`flex items-center gap-1.5 rounded border py-0.5 pr-1.5 font-mono text-[11px] ${
+          isDir ? 'cursor-pointer' : 'cursor-default'
+        } ${rowTone}`}
+      >
+        {isDir ? (
+          open ? (
+            <ChevronDown className="h-3 w-3 flex-none text-text-muted" />
+          ) : (
+            <ChevronRight className="h-3 w-3 flex-none text-text-muted" />
+          )
+        ) : (
+          <span className="h-3 w-3 flex-none" />
+        )}
+        {isDir ? (
+          open ? (
+            <FolderOpen className="h-3.5 w-3.5 flex-none text-accent" />
+          ) : (
+            <Folder className="h-3.5 w-3.5 flex-none text-text-secondary" />
+          )
+        ) : (
+          <FileCode2 className="h-3 w-3 flex-none text-text-muted" />
+        )}
+        <span className={`flex-1 truncate ${nameTone}`}>
+          {node.name}
+          {isDir ? '/' : ''}
+        </span>
+        {node.action && (
+          <span
+            className={`flex-none rounded px-1 text-[9.5px] font-medium uppercase tracking-wider ${badgeTone}`}
+          >
+            {ACTION_LABEL[node.action]}
+          </span>
+        )}
+      </div>
+      {isDir && open && node.children?.map((c) => (
+        <TreeNodeView key={c.name} node={c} depth={depth + 1} />
+      ))}
+    </>
+  )
+}
+
+function RepoPickerModal({
+  open,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  const [step, setStep] = useState<1 | 2>(1)
+  const [repoUrl, setRepoUrl] = useState(MOCK_REPO.url)
+  const [searched, setSearched] = useState(false)
+
+  if (!open) return null
+
+  const reset = () => {
+    setStep(1)
+    setSearched(false)
+    setRepoUrl(MOCK_REPO.url)
+  }
+  const handleClose = () => {
+    reset()
+    onClose()
+  }
+  const handleConfirm = () => {
+    reset()
+    onConfirm()
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
+      onClick={handleClose}
+    >
+      <div
+        className="w-full max-w-[760px] overflow-hidden rounded-lg border border-border bg-surface shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <GitBranch className="h-4 w-4 text-accent" />
+              <h2 className="text-[15px] font-semibold tracking-tight">
+                Selecionar repositório pra migração
+              </h2>
+            </div>
+            <div className="mt-2 flex items-center gap-2 text-[11px]">
+              <span
+                className={`flex h-5 items-center gap-1.5 rounded-full border px-2 ${
+                  step === 1
+                    ? 'border-accent/40 bg-accent/10 text-accent'
+                    : 'border-border bg-bg text-text-muted'
+                }`}
+              >
+                <span className="font-mono">1</span> Buscar repo
+              </span>
+              <ArrowRight className="h-3 w-3 text-text-muted" />
+              <span
+                className={`flex h-5 items-center gap-1.5 rounded-full border px-2 ${
+                  step === 2
+                    ? 'border-accent/40 bg-accent/10 text-accent'
+                    : 'border-border bg-bg text-text-muted'
+                }`}
+              >
+                <span className="font-mono">2</span> Estrutura mono-repo
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            aria-label="fechar"
+            onClick={handleClose}
+            className="flex h-7 w-7 flex-none items-center justify-center rounded text-text-muted hover:bg-bg hover:text-text-primary"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </header>
+
+        {step === 1 ? (
+          <section className="space-y-4 px-5 py-5">
+            <div>
+              <label className="block text-[12px] font-medium text-text-secondary">
+                URL do repositório
+              </label>
+              <p className="mt-0.5 text-[11.5px] text-text-muted">
+                Cole o link do repositório (GitLab ou GitHub Itaú) que será migrado pra estrutura
+                mono-repo Vanilla.
+              </p>
+              <div className="mt-2 flex items-center gap-2">
+                <div className="flex flex-1 items-center gap-2 rounded-md border border-border bg-bg px-3 py-2 focus-within:border-accent">
+                  <GitBranch className="h-3.5 w-3.5 flex-none text-text-muted" />
+                  <input
+                    type="text"
+                    value={repoUrl}
+                    onChange={(e) => {
+                      setRepoUrl(e.target.value)
+                      setSearched(false)
+                    }}
+                    placeholder="git@itau.gitlab.com:apps/<repo>.git"
+                    className="flex-1 bg-transparent font-mono text-[12px] text-text-primary placeholder:text-text-muted focus:outline-none"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSearched(true)}
+                  disabled={!repoUrl.trim()}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent px-3 text-[12px] font-medium text-black transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Search className="h-3.5 w-3.5" />
+                  Buscar
+                </button>
+              </div>
+            </div>
+
+            {searched && (
+              <div className="rounded-md border border-border bg-bg px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-md bg-success/15 text-success">
+                      <CheckCircle2 className="h-4 w-4" />
+                    </span>
+                    <div>
+                      <div className="font-mono text-[12.5px] text-text-primary">
+                        {MOCK_REPO.org}/{MOCK_REPO.name}
+                      </div>
+                      <div className="text-[11px] text-text-muted">
+                        repositório encontrado · default branch {MOCK_REPO.defaultBranch}
+                      </div>
+                    </div>
+                  </div>
+                  <span className="rounded border border-success/30 bg-success/10 px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wider text-success">
+                    pronto
+                  </span>
+                </div>
+                <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[11.5px]">
+                  <div>
+                    <dt className="text-text-muted">Linguagem</dt>
+                    <dd className="text-text-primary">{MOCK_REPO.language}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-text-muted">Contribuidores</dt>
+                    <dd className="font-mono text-text-primary">{MOCK_REPO.contributors}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-text-muted">Tamanho</dt>
+                    <dd className="font-mono text-text-primary">
+                      {MOCK_REPO.size} · {MOCK_REPO.filesCount}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-text-muted">Última tag</dt>
+                    <dd className="font-mono text-text-primary">{MOCK_REPO.lastTag}</dd>
+                  </div>
+                  <div className="col-span-2">
+                    <dt className="text-text-muted">Último commit</dt>
+                    <dd className="font-mono text-text-primary">{MOCK_REPO.lastCommit}</dd>
+                  </div>
+                </dl>
+              </div>
+            )}
+          </section>
+        ) : (
+          <section className="space-y-3 px-5 py-5">
+            <div className="text-[12px] text-text-secondary">
+              Os arquivos abaixo vão ser movidos pra dentro de{' '}
+              <code className="rounded bg-bg px-1.5 py-0.5 font-mono text-[11px] text-accent">
+                apps/ssa-pix-core/
+              </code>{' '}
+              e a tooling Vanilla (Komply, Kaptain, Orkestra) será injetada no caminho do app.
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-md border border-border bg-bg p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <h4 className="text-[12px] font-semibold tracking-tight text-text-primary">
+                    Antes
+                  </h4>
+                  <span className="font-mono text-[10.5px] text-text-muted">repo standalone</span>
+                </div>
+                <div className="max-h-[340px] space-y-0.5 overflow-y-auto pr-1">
+                  <TreeNodeView node={CURRENT_TREE} />
+                </div>
+              </div>
+              <div className="rounded-md border border-accent/30 bg-accent/[0.04] p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <h4 className="text-[12px] font-semibold tracking-tight text-text-primary">
+                    Depois
+                  </h4>
+                  <span className="font-mono text-[10.5px] text-text-muted">
+                    mono-repo Vanilla
+                  </span>
+                </div>
+                <div className="max-h-[340px] space-y-0.5 overflow-y-auto pr-1">
+                  <TreeNodeView node={MONOREPO_TREE} />
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 text-[10.5px] text-text-muted">
+              <span className="flex items-center gap-1">
+                <ArrowRightLeft className="h-3 w-3 text-info" /> movido
+              </span>
+              <span className="flex items-center gap-1">
+                <Plus className="h-3 w-3 text-success" /> adicionado
+              </span>
+              <span className="flex items-center gap-1">
+                <Minus className="h-3 w-3 text-failure" /> removido
+              </span>
+            </div>
+          </section>
+        )}
+
+        <footer className="flex items-center justify-between border-t border-border bg-bg/50 px-5 py-3">
+          <button
+            type="button"
+            onClick={handleClose}
+            className="text-[12px] text-text-secondary hover:text-text-primary"
+          >
+            Cancelar
+          </button>
+          <div className="flex items-center gap-2">
+            {step === 2 && (
+              <button
+                type="button"
+                onClick={() => setStep(1)}
+                className="inline-flex h-9 items-center rounded-md border border-border bg-bg px-3 text-[12px] text-text-secondary hover:border-border-strong hover:text-text-primary"
+              >
+                Voltar
+              </button>
+            )}
+            {step === 1 ? (
+              <button
+                type="button"
+                onClick={() => setStep(2)}
+                disabled={!searched}
+                className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent px-3 text-[12px] font-medium text-black transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Próximo
+                <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleConfirm}
+                className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent px-3 text-[12px] font-medium text-black transition hover:bg-accent-hover"
+              >
+                <Check className="h-3.5 w-3.5" />
+                Confirmar migração
+              </button>
+            )}
+          </div>
+        </footer>
+      </div>
+    </div>
   )
 }
 
@@ -197,9 +701,11 @@ function OnboardingPlaceholder() {
 function OnboardingCard({
   steps,
   contextLabel,
+  onActivate,
 }: {
   steps: OnboardingStep[]
   contextLabel?: string
+  onActivate: (step: OnboardingStep) => void
 }) {
   if (steps.length === 0) {
     return (
@@ -247,7 +753,14 @@ function OnboardingCard({
         {steps.map((s, i) => {
           const attenuated =
             s.status === 'not-started' && inProgressIdx >= 0 && i > inProgressIdx
-          return <OnboardingStepRow key={s.id} step={s} attenuated={attenuated} />
+          return (
+            <OnboardingStepRow
+              key={s.id}
+              step={s}
+              attenuated={attenuated}
+              onActivate={onActivate}
+            />
+          )
         })}
       </ul>
     </div>
@@ -255,8 +768,14 @@ function OnboardingCard({
 }
 
 export default function Home() {
-  const { workflows: instances } = useWorkflows()
-  const lastWorkflow = instances.length > 0 ? instances[instances.length - 1] : null
+  const navigate = useNavigate()
+  const { workflows: instances, advanceStep, addWorkflow } = useWorkflows()
+  const primaryInstance = [...instances]
+    .reverse()
+    .find((inst) => !executionTemplateIds.has(inst.templateId))
+  const lastWorkflow =
+    primaryInstance ?? (instances.length > 0 ? instances[instances.length - 1] : null)
+  const [repoModalOpen, setRepoModalOpen] = useState(false)
 
   const onboardingSteps: OnboardingStep[] = lastWorkflow
     ? (() => {
@@ -274,11 +793,42 @@ export default function Home() {
             stepId: s.id,
             title: s.title,
             description: tmplStep?.description ?? '',
+            ctaLabel: tmplStep?.ctaLabel ?? 'Abrir',
+            completedOnClick: tmplStep?.completedOnClick ?? false,
             status,
           }
         })
       })()
     : []
+
+  const handleStepActivate = (step: OnboardingStep) => {
+    if (!lastWorkflow) return
+    if (step.status !== 'in-progress') return
+    if (step.stepId === 'step-03-select-repos') {
+      setRepoModalOpen(true)
+      return
+    }
+    if (!step.completedOnClick) return
+    advanceStep(lastWorkflow.id)
+
+    const template = workflowTemplates.find((t) => t.id === lastWorkflow.templateId)
+    const tmplStep = template?.onboardingSteps.find((s) => s.id === step.stepId)
+    if (tmplStep?.triggers) {
+      const alreadyTriggered = instances.some(
+        (inst) => inst.templateId === tmplStep.triggers!.id,
+      )
+      if (!alreadyTriggered) addWorkflow(tmplStep.triggers)
+    }
+
+    if (step.stepId === 'step-08-setup-observability') {
+      navigate('/application-hub')
+    }
+  }
+
+  const handleRepoConfirm = () => {
+    if (lastWorkflow) advanceStep(lastWorkflow.id)
+    setRepoModalOpen(false)
+  }
 
   return (
     <div className="space-y-10">
@@ -295,6 +845,7 @@ export default function Home() {
         <OnboardingCard
           steps={onboardingSteps}
           contextLabel={lastWorkflow?.templateName}
+          onActivate={handleStepActivate}
         />
       </section>
 
@@ -303,7 +854,6 @@ export default function Home() {
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <h2 className="text-[15px] font-semibold tracking-tight">Pontos de atenção</h2>
-            <LiveBadge ago="4s" />
           </div>
         </div>
 
@@ -419,6 +969,12 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      <RepoPickerModal
+        open={repoModalOpen}
+        onClose={() => setRepoModalOpen(false)}
+        onConfirm={handleRepoConfirm}
+      />
     </div>
   )
 }

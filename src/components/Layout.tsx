@@ -2,6 +2,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   Activity,
   Boxes,
+  House,
   LayoutGrid,
   Search,
   Bell,
@@ -43,7 +44,7 @@ export function Layout() {
               }`
             }
           >
-            <div className="h-1.5 w-1.5 rounded-full bg-accent" />
+            <House className="h-4 w-4" />
             Home
           </NavLink>
           {navItems.map(({ to, label, icon: Icon }) => (

@@ -561,9 +561,7 @@ function WorkflowItem({
 
 export default function AssetsCatalog() {
   const [tab, setTab] = useState<TabKey>('workflows')
-  const [expandedWorkflows, setExpandedWorkflows] = useState<Set<string>>(
-    new Set(workflows[0] ? [workflows[0].id] : []),
-  )
+  const [expandedWorkflows, setExpandedWorkflows] = useState<Set<string>>(new Set())
 
   const toggleWorkflow = (id: string) => {
     setExpandedWorkflows((prev) => {

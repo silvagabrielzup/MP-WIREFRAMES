@@ -33,3 +33,12 @@ Estilo:
 - Hierarquia visual clara entre estados: not-started (normal) < in-progress (accent border + badge) < done (atenuado + check verde)
 - Done NÃO usa verde forte — só o check e texto cinza
 - Manter os 3 estados visualmente coerentes — o toggle é decorativo mas tem que renderizar tudo certo
+
+Requisitos de steps : 
+
+3. Selecionar repos pra migração :
+ - CONTEXT : este step se baseia transferir o projeto que está em um repo X para um estrutura de mono-repo do projeto . 
+ - REQUIREMENT : 
+    - Abrir um modal , para colocar o link do repositório . Será um modal com múltiplos steps , o primeiro step será para buscar o repositório , o segundo step será para mostrar um diff de estava o repo e uma estrutura para como o repo irá ficar .
+  - DADOS : 
+    - Para o repositório , traga uns dados mockados  

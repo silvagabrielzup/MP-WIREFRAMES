@@ -23,6 +23,20 @@ export type OnboardingStep = {
   description: string
   required: boolean
   dependsOn: string[]
+  /**
+   * Quando true, o passo é considerado concluído assim que o usuário clica
+   * nele no card "Próximos passos" da Home — sem precisar de sinal externo.
+   * Usado para tarefas manuais cuja conclusão a plataforma não consegue
+   * detectar (ex.: instalar a CLI, solicitar permissão).
+   */
+  completedOnClick: boolean
+  /** Texto do botão de CTA exibido no card "Próximos passos" da Home. */
+  ctaLabel: string
+  /**
+   * Workflow disparado automaticamente quando este passo é concluído. A
+   * instância resultante aparece no Workflow Tracker como execução ligada.
+   */
+  triggers?: WorkflowAsset
 }
 
 export type WorkflowInput = {
@@ -60,6 +74,161 @@ export type WorkflowAsset = {
   usage: WorkflowUsage
 }
 
+/**
+ * Promoção HML — disparada quando o step-07 (Promover pra homologação) é
+ * concluído. Rollout canário gradual com gate humano em 50%.
+ */
+export const hmlPromotionWorkflow: WorkflowAsset = {
+  kind: 'workflow',
+  id: 'wf-promote-hml',
+  name: 'Promoção HML — ssa-pix-core',
+  version: '0.4.2',
+  owner: 'squad-vanilla-platform',
+  description:
+    'Rollout canário pra homologação com gate humano em 50% e auto-rollback por SLO. Disparado após validação em dev.',
+  type: 'rollout',
+  status: 'beta',
+  maturity: 'experimental',
+  onboardingSteps: [
+    {
+      id: 'hml-canary-5',
+      title: 'Canário 5% (Traffik)',
+      description: 'Direciona 5% do tráfego HML para a nova versão; observa p99 e erro %.',
+      required: true,
+      dependsOn: [],
+      completedOnClick: true,
+      ctaLabel: 'Subir pra 5%',
+    },
+    {
+      id: 'hml-canary-50',
+      title: 'Canário 50% (gate humano)',
+      description: 'Sobe pra 50% após approval; Komply valida policies de rede e dados.',
+      required: true,
+      dependsOn: ['hml-canary-5'],
+      completedOnClick: true,
+      ctaLabel: 'Aprovar 50%',
+    },
+    {
+      id: 'hml-canary-100',
+      title: 'Canário 100%',
+      description: 'Promove totalmente em HML; reset da janela de observação Datadog (1h).',
+      required: true,
+      dependsOn: ['hml-canary-50'],
+      completedOnClick: true,
+      ctaLabel: 'Promover pra 100%',
+    },
+    {
+      id: 'hml-smoke',
+      title: 'Smoke test pós-rollout',
+      description: 'Suíte de integração contra HML; valida checks de Komply / Pantheon.',
+      required: true,
+      dependsOn: ['hml-canary-100'],
+      completedOnClick: true,
+      ctaLabel: 'Rodar smoke',
+    },
+  ],
+  dependencies: {
+    skills: [],
+    mcps: ['traffik.canary', 'komply.evaluate', 'kaptain.deploy'],
+    apis: ['itau-datadog'],
+  },
+  inputs: [
+    {
+      name: 'sa_id',
+      type: 'string',
+      required: true,
+      description: 'SA alvo da promoção.',
+      default: 'ssa-pix-core',
+    },
+    {
+      name: 'approval_required',
+      type: 'boolean',
+      required: false,
+      description: 'Gate humano obrigatório em 50%.',
+      default: 'true',
+    },
+  ],
+  usage: { consumers: 1, runs7d: 1 },
+}
+
+/**
+ * Pipeline disparado automaticamente quando o step-04 (Lançar workflow de
+ * onboarding) é concluído. Roda os 4 verbos da Operação Vanilla (build,
+ * deploy, migration, rollout) na SA configurada.
+ */
+export const migrationExecutionWorkflow: WorkflowAsset = {
+  kind: 'workflow',
+  id: 'wf-onboarding-vanilla-exec',
+  name: 'Execução Vanilla — ssa-pix-core',
+  version: '0.4.2',
+  owner: 'squad-vanilla-platform',
+  description:
+    'Pipeline orquestrado disparado após o onboarding. Executa os 4 verbos da Operação Vanilla na SA configurada (build via Konstructor, deploy via Kaptain, migração de dados em dual-write e rollout canário pelo Traffik).',
+  type: 'migration',
+  status: 'beta',
+  maturity: 'experimental',
+  onboardingSteps: [
+    {
+      id: 'verb-build',
+      title: 'build · Konstructor',
+      description: 'Empacota imagem OCI a partir do pom.xml e publica em artifactory-itau.',
+      required: true,
+      dependsOn: [],
+      completedOnClick: true,
+      ctaLabel: 'Marcar build',
+    },
+    {
+      id: 'verb-deploy',
+      title: 'deploy · Kaptain',
+      description: 'Provisiona infra em dev via CloudFormation e sobe o app em ECS Fargate.',
+      required: true,
+      dependsOn: ['verb-build'],
+      completedOnClick: true,
+      ctaLabel: 'Marcar deploy',
+    },
+    {
+      id: 'verb-migration',
+      title: 'migration · dual-write',
+      description: 'Ativa dual-write entre Oracle legado e Aurora alvo; valida lag p99 < 200ms.',
+      required: true,
+      dependsOn: ['verb-deploy'],
+      completedOnClick: true,
+      ctaLabel: 'Marcar migration',
+    },
+    {
+      id: 'verb-rollout',
+      title: 'rollout · Traffik',
+      description: 'Rollout canário 5% → 50% → 100% com gate humano em 50% e auto-rollback por SLO.',
+      required: true,
+      dependsOn: ['verb-migration'],
+      completedOnClick: true,
+      ctaLabel: 'Marcar rollout',
+    },
+  ],
+  dependencies: {
+    skills: ['scaffold-vanilla-app'],
+    mcps: ['konstructor.build', 'kaptain.deploy', 'traffik.canary', 'pantheon.topic_create'],
+    apis: ['itau-cmdb', 'itau-datadog'],
+  },
+  inputs: [
+    {
+      name: 'sa_id',
+      type: 'string',
+      required: true,
+      description: 'SA alvo da execução.',
+      default: 'ssa-pix-core',
+    },
+    {
+      name: 'canary_percent',
+      type: 'number',
+      required: false,
+      description: 'Percentual inicial do rollout canário.',
+      default: '5',
+    },
+  ],
+  usage: { consumers: 1, runs7d: 1 },
+}
+
 export const migrationWorkflow: WorkflowAsset = {
   kind: 'workflow',
   id: 'wf-migration-vanilla',
@@ -78,6 +247,8 @@ export const migrationWorkflow: WorkflowAsset = {
       description: 'Binário oficial + autenticação inicial com SSO Itaú.',
       required: true,
       dependsOn: [],
+      completedOnClick: true,
+      ctaLabel: 'Baixar CLI',
     },
     {
       id: 'step-02-permission-cloud',
@@ -85,6 +256,8 @@ export const migrationWorkflow: WorkflowAsset = {
       description: 'Solicitar role e aguardar aprovação automatizada.',
       required: true,
       dependsOn: ['step-01-install-cli'],
+      completedOnClick: true,
+      ctaLabel: 'Solicitar acesso',
     },
     {
       id: 'step-03-select-repos',
@@ -92,27 +265,27 @@ export const migrationWorkflow: WorkflowAsset = {
       description: 'Escolher quais repositórios entram na primeira leva.',
       required: true,
       dependsOn: ['step-02-permission-cloud'],
+      completedOnClick: false,
+      ctaLabel: 'Selecionar repos',
     },
     {
       id: 'step-04-configure-workflow',
-      title: 'Configurar workflow de onboarding',
+      title: 'Lançar workflow de onboarding',
       description: 'Parametrizar verbos da Operação Vanilla pro repo selecionado.',
       required: true,
       dependsOn: ['step-03-select-repos'],
-    },
-    {
-      id: 'step-05-trigger-first-run',
-      title: 'Disparar primeira execução',
-      description: 'Rodar onboarding-vanilla-brownfield em dev pela primeira vez.',
-      required: true,
-      dependsOn: ['step-04-configure-workflow'],
+      completedOnClick: true,
+      ctaLabel: 'Lançar workflow',
+      triggers: migrationExecutionWorkflow,
     },
     {
       id: 'step-06-validate-dev',
       title: 'Validar resultado em dev',
       description: 'Conferir saúde do workflow, logs e checks de Komply.',
       required: true,
-      dependsOn: ['step-05-trigger-first-run'],
+      dependsOn: ['step-04-configure-workflow'],
+      completedOnClick: true,
+      ctaLabel: 'Ver checks',
     },
     {
       id: 'step-07-promote-hml',
@@ -120,13 +293,18 @@ export const migrationWorkflow: WorkflowAsset = {
       description: 'Disparar rollout canário com gate humano em 50%.',
       required: true,
       dependsOn: ['step-06-validate-dev'],
+      completedOnClick: true,
+      ctaLabel: 'Promover pra HML',
+      triggers: hmlPromotionWorkflow,
     },
     {
       id: 'step-08-setup-observability',
-      title: 'Configurar observabilidade',
-      description: 'Linkar dashboards Datadog e monitores p99 / erro %.',
+      title: 'Observabilidade',
+      description: 'Dashboards Datadog e monitores p99 / erro %.',
       required: true,
       dependsOn: ['step-07-promote-hml'],
+      completedOnClick: true,
+      ctaLabel: 'Ver Saúde no Application Hub',
     },
   ],
   dependencies: {
@@ -167,3 +345,89 @@ export const migrationWorkflow: WorkflowAsset = {
 }
 
 export const workflows: WorkflowAsset[] = [migrationWorkflow]
+
+/**
+ * Conjunto de IDs de workflows que são execuções "ligadas" — disparados via
+ * `step.triggers` por outro template. Usado pra separar instâncias primárias
+ * (Home / onboarding) de instâncias de execução (Workflow Tracker).
+ */
+export const executionTemplateIds: Set<string> = new Set(
+  workflows.flatMap((t) =>
+    t.onboardingSteps
+      .map((s) => s.triggers?.id)
+      .filter((id): id is string => Boolean(id)),
+  ),
+)
+
+// -----------------------------------------------------------------------------
+// Application Hub
+// -----------------------------------------------------------------------------
+
+export type ApplicationHubHealth = 'healthy' | 'warn' | 'fail'
+
+export type ApplicationHub = {
+  /** Identificador interno do hub (chave estrangeira em notificações). */
+  id: string
+  /** SA Itaú (Sigla App) — também usado como slug de URL. */
+  sa: string
+  /** Projeto/programa ao qual a SA pertence. */
+  projectId: string
+  squad: string
+  /** App migrado pra plataforma StackSpot. */
+  onPlat: boolean
+  health: ApplicationHubHealth
+  liveIncident: boolean
+  /** Uptime últimas 24h (%). */
+  uptime: number
+  /** Latência p95 em ms. */
+  p95Ms: number
+  /** Taxa de erro últimas 24h (%). */
+  errorRate: number
+  /** Deploys nos últimos 7 dias. */
+  deploys7d: number
+}
+
+export const applicationHubs: ApplicationHub[] = []
+
+// -----------------------------------------------------------------------------
+// Application Hub Notifications
+// -----------------------------------------------------------------------------
+
+/**
+ * Nome do ícone lucide-react renderizado pela UI da notificação. Mantido como
+ * string para evitar acoplar database.ts à camada de renderização.
+ */
+export type ApplicationHubNotificationIcon =
+  | 'CheckCircle2'
+  | 'AlertTriangle'
+  | 'ShieldCheck'
+  | 'Activity'
+  | 'Rocket'
+
+export type ApplicationHubNotification = {
+  id: string
+  icon: ApplicationHubNotificationIcon
+  title: string
+  description: string
+  cta: string
+  /** Rota interna para onde o CTA leva — listagem/detalhe do Application Hub. */
+  link: string
+  /** FK para `ApplicationHub.id`. */
+  applicationHubId: string
+  /** FK para o projeto agregador (também presente no hub). */
+  projectId: string
+}
+
+export const applicationHubNotifications: ApplicationHubNotification[] = [
+  {
+    id: 'notif-hml-provisioned-ssa-pix-core',
+    icon: 'CheckCircle2',
+    title: 'Application Hub HML provisionado',
+    description:
+      'A pilha de homologação de ssa-pix-core foi provisionada e está saudável (p95 184ms, erro 0.42%). Acompanhe a saúde da aplicação direto no Application Hub.',
+    cta: 'Ver saúde em HML',
+    link: '/application-hub/ssa-pix-core?env=hml',
+    applicationHubId: 'ahub-ssa-pix-core',
+    projectId: 'proj-pix-platform',
+  },
+]

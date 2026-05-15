@@ -3,124 +3,13 @@ import {
   ChevronRight,
   ArrowRight,
   Search,
+  Boxes,
 } from 'lucide-react'
-
-type HealthStatus = 'healthy' | 'warn' | 'fail'
-
-type App = {
-  id: string
-  sa: string
-  squad: string
-  onPlat: boolean
-  health: HealthStatus
-  liveIncident: boolean
-  uptime: number
-  p95Ms: number
-  errorRate: number
-  deploys7d: number
-}
-
-const apps: App[] = [
-  {
-    id: 'ssa-pix-core',
-    sa: 'ssa-pix-core',
-    squad: 'squad-pix',
-    onPlat: true,
-    health: 'warn',
-    liveIncident: true,
-    uptime: 99.92,
-    p95Ms: 184,
-    errorRate: 0.42,
-    deploys7d: 6,
-  },
-  {
-    id: 'ssa-conta-corrente',
-    sa: 'ssa-conta-corrente',
-    squad: 'squad-cc',
-    onPlat: true,
-    health: 'healthy',
-    liveIncident: false,
-    uptime: 99.99,
-    p95Ms: 92,
-    errorRate: 0.08,
-    deploys7d: 11,
-  },
-  {
-    id: 'ssa-investimentos',
-    sa: 'ssa-investimentos',
-    squad: 'squad-invest',
-    onPlat: true,
-    health: 'fail',
-    liveIncident: true,
-    uptime: 99.62,
-    p95Ms: 412,
-    errorRate: 2.31,
-    deploys7d: 2,
-  },
-  {
-    id: 'ssa-credito-prefixado',
-    sa: 'ssa-credito-prefixado',
-    squad: 'squad-credito',
-    onPlat: true,
-    health: 'healthy',
-    liveIncident: false,
-    uptime: 99.97,
-    p95Ms: 121,
-    errorRate: 0.11,
-    deploys7d: 8,
-  },
-  {
-    id: 'ssa-cartoes',
-    sa: 'ssa-cartoes',
-    squad: 'squad-cartoes',
-    onPlat: false,
-    health: 'warn',
-    liveIncident: false,
-    uptime: 99.81,
-    p95Ms: 247,
-    errorRate: 0.74,
-    deploys7d: 3,
-  },
-  {
-    id: 'ssa-seguros',
-    sa: 'ssa-seguros',
-    squad: 'squad-seguros',
-    onPlat: true,
-    health: 'healthy',
-    liveIncident: false,
-    uptime: 99.96,
-    p95Ms: 108,
-    errorRate: 0.13,
-    deploys7d: 5,
-  },
-  {
-    id: 'ssa-onboarding-digital',
-    sa: 'ssa-onboarding-digital',
-    squad: 'squad-onboarding',
-    onPlat: true,
-    health: 'healthy',
-    liveIncident: false,
-    uptime: 99.94,
-    p95Ms: 156,
-    errorRate: 0.21,
-    deploys7d: 9,
-  },
-  {
-    id: 'ssa-12345',
-    sa: 'ssa-12345',
-    squad: 'squad-platform',
-    onPlat: false,
-    health: 'warn',
-    liveIncident: false,
-    uptime: 99.78,
-    p95Ms: 271,
-    errorRate: 0.91,
-    deploys7d: 1,
-  },
-]
+import { type ApplicationHub, type ApplicationHubHealth } from '../data/database'
+import { useWorkflows } from '../contexts/WorkflowsProvider'
 
 const healthMeta: Record<
-  HealthStatus,
+  ApplicationHubHealth,
   { dot: string; label: string; text: string; pill: string }
 > = {
   healthy: {
@@ -152,7 +41,7 @@ function LivePulse() {
   )
 }
 
-function HealthPill({ status }: { status: HealthStatus }) {
+function HealthPill({ status }: { status: ApplicationHubHealth }) {
   const m = healthMeta[status]
   return (
     <span
@@ -164,7 +53,7 @@ function HealthPill({ status }: { status: HealthStatus }) {
   )
 }
 
-function StatRow({ apps }: { apps: App[] }) {
+function StatRow({ apps }: { apps: ApplicationHub[] }) {
   const healthy = apps.filter((a) => a.health === 'healthy').length
   const warn = apps.filter((a) => a.health === 'warn').length
   const fail = apps.filter((a) => a.health === 'fail').length
@@ -208,6 +97,7 @@ function Stat({
 }
 
 export default function ApplicationHub() {
+  const { applicationHubs } = useWorkflows()
   return (
     <div className="space-y-6">
       <header className="space-y-2">
@@ -235,35 +125,52 @@ export default function ApplicationHub() {
         </div>
       </header>
 
-      <StatRow apps={apps} />
+      {applicationHubs.length === 0 ? (
+        <section className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-surface px-6 py-16 text-center">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-[#181A1F]">
+            <Boxes className="h-5 w-5 text-text-muted" />
+          </span>
+          <h3 className="text-[15px] font-semibold tracking-tight text-text-primary">
+            Nenhuma aplicação on-platform
+          </h3>
+          <p className="max-w-[460px] text-[12.5px] text-text-secondary">
+            Application Hubs aparecem aqui depois que uma SA conclui o onboarding Vanilla e tem
+            o pipeline de provisionamento finalizado.
+          </p>
+        </section>
+      ) : (
+        <>
+          <StatRow apps={applicationHubs} />
 
-      <section>
-        <div className="mb-3 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <h2 className="text-[15px] font-semibold tracking-tight">Aplicações</h2>
-            <span className="text-[12px] text-text-muted">{apps.length} on-platform</span>
-          </div>
-          <button className="text-[11.5px] text-text-secondary hover:text-text-primary">
-            ver todas
-          </button>
-        </div>
+          <section>
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-[15px] font-semibold tracking-tight">Aplicações</h2>
+                <span className="text-[12px] text-text-muted">
+                  {applicationHubs.length} on-platform
+                </span>
+              </div>
+              <button className="text-[11.5px] text-text-secondary hover:text-text-primary">
+                ver todas
+              </button>
+            </div>
 
-        <div className="overflow-hidden rounded-lg border border-border bg-surface">
-          <table className="w-full text-[12.5px]">
-            <thead>
-              <tr className="border-b border-border bg-[#101115] text-left text-[11px] uppercase tracking-wider text-text-muted">
-                <th className="px-4 py-2.5 font-medium">SA</th>
-                <th className="px-4 py-2.5 font-medium">Squad</th>
-                <th className="px-4 py-2.5 font-medium">Saúde</th>
-                <th className="px-4 py-2.5 font-medium text-right">Uptime</th>
-                <th className="px-4 py-2.5 font-medium text-right">p95</th>
-                <th className="px-4 py-2.5 font-medium text-right">Erro %</th>
-                <th className="px-4 py-2.5 font-medium text-right">Deploys 7d</th>
-                <th className="px-4 py-2.5" />
-              </tr>
-            </thead>
-            <tbody>
-              {apps.map((a) => {
+            <div className="overflow-hidden rounded-lg border border-border bg-surface">
+              <table className="w-full text-[12.5px]">
+                <thead>
+                  <tr className="border-b border-border bg-[#101115] text-left text-[11px] uppercase tracking-wider text-text-muted">
+                    <th className="px-4 py-2.5 font-medium">SA</th>
+                    <th className="px-4 py-2.5 font-medium">Squad</th>
+                    <th className="px-4 py-2.5 font-medium">Saúde</th>
+                    <th className="px-4 py-2.5 font-medium text-right">Uptime</th>
+                    <th className="px-4 py-2.5 font-medium text-right">p95</th>
+                    <th className="px-4 py-2.5 font-medium text-right">Erro %</th>
+                    <th className="px-4 py-2.5 font-medium text-right">Deploys 7d</th>
+                    <th className="px-4 py-2.5" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {applicationHubs.map((a) => {
                 const meta = healthMeta[a.health]
                 return (
                   <tr key={a.id} className="group border-b border-border last:border-b-0 hover:bg-[#181A1F]">
@@ -304,11 +211,13 @@ export default function ApplicationHub() {
                     </td>
                   </tr>
                 )
-              })}
-            </tbody>
-          </table>
-        </div>
-      </section>
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </>
+      )}
 
     </div>
   )
