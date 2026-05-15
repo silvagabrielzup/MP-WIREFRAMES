@@ -47,7 +47,6 @@ type OnboardingStep = {
   ctaLabel: string
   completedOnClick: boolean
   status: StepStatus
-  finalStep: boolean
 }
 
 function EmptyState({
@@ -1140,14 +1139,10 @@ function OnboardingCard({
     )
   }
 
-  const regularSteps = steps.filter((s) => !s.finalStep)
-  const finalSteps = steps.filter((s) => s.finalStep)
-  const finalStep = finalSteps[0]
-  const total = regularSteps.length || steps.length
-  const doneCount = regularSteps.filter((s) => s.status === 'done').length
+  const total = steps.length
+  const doneCount = steps.filter((s) => s.status === 'done').length
   const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0
-  const inProgressIdx = regularSteps.findIndex((s) => s.status === 'in-progress')
-  const allRegularDone = doneCount === total
+  const inProgressIdx = steps.findIndex((s) => s.status === 'in-progress')
 
   return (
     <div className="rounded-lg border border-border bg-surface">
@@ -1173,7 +1168,7 @@ function OnboardingCard({
         </div>
       </div>
       <ul>
-        {regularSteps.map((s, i) => {
+        {steps.map((s, i) => {
           const attenuated =
             s.status === 'not-started' && inProgressIdx >= 0 && i > inProgressIdx
           return (
@@ -1186,30 +1181,6 @@ function OnboardingCard({
           )
         })}
       </ul>
-
-      {finalStep && (
-        <div
-          className={`border-t border-border px-4 py-3 ${
-            allRegularDone ? 'bg-accent/[0.06]' : 'opacity-60'
-          }`}
-        >
-          <div className="mb-2 flex items-center gap-2">
-            <span className="rounded-full border border-accent/40 bg-accent/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-accent">
-              último passo
-            </span>
-            {allRegularDone && (
-              <span className="text-[10.5px] uppercase tracking-wider text-success">
-                fluxo 100% completo
-              </span>
-            )}
-          </div>
-          <OnboardingStepRow
-            step={finalStep}
-            attenuated={!allRegularDone}
-            onActivate={onActivate}
-          />
-        </div>
-      )}
     </div>
   )
 }
@@ -1242,7 +1213,6 @@ export default function Home() {
             ctaLabel: tmplStep?.ctaLabel ?? 'Abrir',
             completedOnClick: tmplStep?.completedOnClick ?? false,
             status,
-            finalStep: tmplStep?.finalStep ?? false,
           }
         })
       })()

@@ -51,7 +51,7 @@ Esse painel é o ponto de entrada para a ambição de "substituir os control pla
 
 ### Fonte de dados
 
-A tela consome `useWorkflows().applicationHubs` (state runtime no `WorkflowsProvider`), **não mais** um array hardcoded. O seed em `database.ts` (`applicationHubs: ApplicationHub[] = []`) é vazio — itens aparecem dinamicamente quando um workflow primário entra/conclui o `finalStep`.
+A tela consome `useWorkflows().applicationHubs` (state runtime no `WorkflowsProvider`), **não mais** um array hardcoded. O seed em `database.ts` (`applicationHubs: ApplicationHub[] = []`) é vazio — itens aparecem dinamicamente quando um workflow primário conclui.
 
 ### Tipo `ApplicationHub`
 
@@ -69,12 +69,7 @@ Campos atuais:
 
 ### Gating de criação
 
-`WorkflowsProvider.advanceStep` cria o hub via `buildHubFromTemplate(template)` em **duas situações**:
-
-1. Workflow primário entrou no step marcado `finalStep: true` (eager) — usuário ainda nem clicou o CTA final, mas a trajetória já é considerada concluída.
-2. Workflow primário atingiu o último step naturalmente.
-
-Guard `!executionTemplateIds.has(template.id)` garante que só primários (não execuções como `migrationExecutionWorkflow` / `hmlPromotionWorkflow`) disparam.
+`WorkflowsProvider.advanceStep` cria o hub via `buildHubFromTemplate(template)` quando o workflow primário atinge o último step. Guard `!executionTemplateIds.has(template.id)` garante que só primários (não execuções como `migrationExecutionWorkflow` / `hmlPromotionWorkflow`) disparam.
 
 Dedupe por `hub.id` impede entrada duplicada.
 

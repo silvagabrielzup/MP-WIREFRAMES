@@ -58,7 +58,7 @@ Os 8 originais foram reduzidos pra 6 ao longo das iterações (`step-05-trigger-
 3. `step-03-select-repos` — Selecionar repos pra migração — `completedOnClick: false` — CTA "Selecionar repos" → abre `RepoPickerModal`
 4. `step-04-configure-workflow` — Lançar workflow de onboarding — `completedOnClick: true` — CTA "Lançar workflow" — `triggers: migrationExecutionWorkflow`
 5. `step-06-validate-dev` — Validar resultado em dev — `completedOnClick: false` — CTA "Ver checks"
-6. `step-07-promote-hml` — Promover pra homologação — `completedOnClick: true` — CTA "Promover pra HML" — `triggers: hmlPromotionWorkflow` — **`finalStep: true`**
+6. `step-07-promote-hml` — Promover pra homologação — `completedOnClick: true` — CTA "Promover pra HML" — `triggers: hmlPromotionWorkflow`
 
 ### Props adicionadas em `OnboardingStep`
 
@@ -66,19 +66,13 @@ Os 8 originais foram reduzidos pra 6 ao longo das iterações (`step-05-trigger-
 - `ctaLabel: string` — texto do botão CTA (em vez de "Abrir →" genérico).
 - `triggers?: WorkflowAsset` — dispara workflow ligado ao concluir.
 - `agentic?: AgenticPropositionMetadata` — passo agêntico com Accept/Decline.
-- `finalStep?: boolean` — último passo da trajetória.
 
 ### Render
 
 - Lista vertical de `OnboardingStepRow` com checkbox (3 estados), título, descrição e botão CTA com `ctaLabel`.
 - Botão CTA é accent quando o step é o atual + `completedOnClick=true`; cinza neutro caso contrário.
 - Linha e botão CTA compartilham `onActivate(step)`.
-- `OnboardingCard` separa `regularSteps` de `finalSteps`. Progresso (`X de N · pct%`) calcula só sobre regulares — quando todos os regulares estão `done`, a barra mostra 100% mesmo com o finalStep ainda visível.
-- O finalStep renderiza em seção dedicada abaixo da lista (`border-t`, bg `accent/[0.06]` quando ativo, `opacity-60` quando bloqueado), com badge "último passo" + label "fluxo 100% completo" quando aplicável.
-
-### Comportamento finalStep
-
-Ao entrar num finalStep via `advanceStep` no provider, o workflow já é marcado `completed` (eager-complete), o finalStep também vira `done` no mesmo frame, hub do Application Hub é provisionado, alerta é emitido e `triggers` do finalStep disparam automaticamente. Resultado: no happy path, o usuário vai direto pro `CongratsAlert` ao concluir step-06 — a seção "último passo" só aparece como código defensivo.
+- Progresso (`X de N · pct%`) calcula sobre todos os passos do workflow.
 
 ### Modal de step-03 — 3 passos
 

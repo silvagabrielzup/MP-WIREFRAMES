@@ -7,6 +7,90 @@ import {
   type WorkflowAsset,
 } from '../data/database'
 
+// =============================================================================
+// Spec types — `specs/context/worflow-context.md`
+// =============================================================================
+
+export type WorkflowStep = {
+  id: string
+  slug: string
+  name: string
+  description: string
+  isCompleted: boolean
+  /**
+   * Algumas ações são async; o passo só pode ser avançado pelo usuário
+   * quando `canProgress` for true (ex.: passos manuais com `completedOnClick`).
+   */
+  canProgress: boolean
+  // --- legacy aliases (mantidos pra retro-compatibilidade enquanto consumidores migram) ---
+  /** Alias de `name`. */
+  title: string
+  status: StepInstanceStatus
+  startedAt?: string
+  completedAt?: string
+}
+
+export type ExecutionStepType = 'Inference' | 'Computacional'
+
+export type ExecutionStep = {
+  type: ExecutionStepType
+  name: string
+  slug: string
+  /** Se `type === 'Inference'`, sempre true. */
+  needHumanApproval: boolean
+  /** `null` = usuário ainda não decidiu. */
+  isApprovedByHuman: boolean | null
+}
+
+export type ExecutionWorkflow = {
+  id: string
+  slug: string
+  name: string
+  description: string
+  steps: ExecutionStep[]
+  /** Slug do step corrente. */
+  currentStep: string
+  // --- legacy aliases ---
+  /** Alias de `slug` — o id do template subjacente. */
+  templateId: string
+  /** Alias de `name`. */
+  templateName: string
+  status: WorkflowStatus
+  startedAt: string
+  /** Mapeia 1-1 com `steps` mantendo o formato legacy de `StepInstance`. */
+  legacySteps: StepInstance[]
+  currentStepIndex: number
+  /** Itens agênticos pendentes derivados dos steps `needHumanApproval`. */
+  pendingAgenticFlow: PendingAgenticFlowItem[]
+}
+
+export type Workflow = {
+  id: string
+  slug: string
+  name: string
+  description: string
+  steps: WorkflowStep[]
+  /** Aplicações on-platform provisionadas por este workflow. */
+  infraOnPlat: ApplicationHub[]
+  /** Workflows agênticos/de execução disparados por este workflow. */
+  workflowsOnPlat: ExecutionWorkflow[]
+  // --- legacy aliases ---
+  /** Alias de `slug`. */
+  templateId: string
+  /** Alias de `name`. */
+  templateName: string
+  status: WorkflowStatus
+  startedAt: string
+  /** Mapeia 1-1 com `steps`, mantendo o formato legacy de `StepInstance`. */
+  legacySteps: StepInstance[]
+  currentStepIndex: number
+  pendingAgenticFlow: PendingAgenticFlowItem[]
+}
+
+// =============================================================================
+// Legacy types — gradualmente sendo migrados pros spec types acima
+// =============================================================================
+
 export type StepInstanceStatus = 'pending' | 'in-progress' | 'done'
 
 export type StepInstance = {
@@ -25,41 +109,19 @@ export type WorkflowStatus =
   | 'failed'
 
 export type PendingAgenticFlowItem = {
-  /** ID do step agêntico dentro do template. */
   stepId: string
-  /** Título humano do step. */
   stepTitle: string
-  /** Título da PR/ação proposta pelo agente. */
   prTitle: string
-  /** Identificação do agente proponente. */
   prAuthor: string
-  /** Resumo curto da proposição (1-2 frases). */
   prSummary: string
-  /** Número de arquivos modificados. */
   filesChanged: number
-  /** Total de linhas adicionadas no diff. */
   linesAdded: number
-  /** Total de linhas removidas no diff. */
   linesRemoved: number
-  /** ISO timestamp de quando o item foi enfileirado. */
   createdAt: string
 }
 
-export type WorkflowInstance = {
-  id: string
-  templateId: string
-  templateName: string
-  status: WorkflowStatus
-  startedAt: string
-  steps: StepInstance[]
-  currentStepIndex: number
-  /**
-   * Itens agênticos que ainda precisam de aprovação humana. Populado na
-   * criação da instância a partir dos steps do template que carregam
-   * `agentic` metadata; pode ser usado pela Home pra surfar ações pendentes.
-   */
-  pendingAgenticFlow: PendingAgenticFlowItem[]
-}
+// Compat name — usado em consumidores antigos. Sinônimo de `Workflow`.
+export type WorkflowInstance = Workflow
 
 export type AppHubAlertKind = 'approval' | 'failure' | 'policy'
 
@@ -71,22 +133,35 @@ export type AppHubAlert = {
   ago: string
 }
 
+// =============================================================================
+// Context value
+// =============================================================================
+
 type WorkflowsContextValue = {
-  workflows: WorkflowInstance[]
+  // ----- Spec-aligned API (CRUD) -----
+  workflows: Workflow[]
+  createWorkflow: (templateOrAsset: string | WorkflowAsset) => Workflow | null
+  getWorkflow: (id: string) => Workflow | undefined
+  updateWorkflow: (id: string, update: Partial<Workflow>) => void
+  deleteWorkflow: (id: string) => void
+
+  // ----- Derivados / orthogonais -----
+  /** Flatten de `workflows[].infraOnPlat`. */
   applicationHubs: ApplicationHub[]
   appHubAlerts: AppHubAlert[]
-  getWorkflow: (workflowId: string) => WorkflowInstance | undefined
-  addWorkflow: (templateOrAsset: string | WorkflowAsset) => WorkflowInstance | null
+
+  // ----- Façades sobre CRUD (mantidas pra retro-compat) -----
+  addWorkflow: (templateOrAsset: string | WorkflowAsset) => Workflow | null
   advanceStep: (workflowId: string) => void
   advanceStatus: (workflowId: string, status: WorkflowStatus) => void
-  /**
-   * Remove o item agêntico (matched por stepId) do `pendingAgenticFlow`
-   * da instância indicada — chamado depois da decisão humana (Aprovar/Declinar).
-   */
   resolveAgenticItem: (workflowId: string, stepId: string) => void
 }
 
 const WorkflowsContext = createContext<WorkflowsContextValue | null>(null)
+
+// =============================================================================
+// Helpers
+// =============================================================================
 
 /** Resolve um templateId percorrendo templates raiz e seus triggers. */
 function findTemplateById(id: string): WorkflowAsset | undefined {
@@ -119,7 +194,6 @@ const SA_TO_SQUAD: Record<string, string> = {
   'ssa-onboarding-digital': 'squad-onboarding',
 }
 
-/** "ssa-pix-core" → "Pix Core"; "ssa-conta-corrente" → "Conta Corrente". */
 function toFriendlyAppName(sa: string): string {
   return sa
     .replace(/^ssa-/, '')
@@ -128,12 +202,6 @@ function toFriendlyAppName(sa: string): string {
     .join(' ')
 }
 
-/**
- * Gera um Application Hub plausível a partir do template do workflow que
- * acabou de finalizar. Pega o `sa_id` dos inputs do template e deriva
- * projectId/squad via lookup. Métricas refletem um app recém-promovido para
- * HML: SLO saudável, baixíssima taxa de erro, deploy zero-vinte-quatro horas.
- */
 function buildHubFromTemplate(template: WorkflowAsset): ApplicationHub {
   const saInput = template.inputs.find((i) => i.name === 'sa_id')
   const sa = saInput?.default ?? 'ssa-pix-core'
@@ -154,11 +222,6 @@ function buildHubFromTemplate(template: WorkflowAsset): ApplicationHub {
   }
 }
 
-/**
- * Gera um alerta da Application Hub representando falha parcial na infra
- * provisionada pelo workflow recém-concluído. Pensado pra surfar como
- * "algo não subiu corretamente" mesmo o workflow tendo terminado.
- */
 function buildAlertFromTemplate(template: WorkflowAsset): AppHubAlert {
   const saInput = template.inputs.find((i) => i.name === 'sa_id')
   const sa = saInput?.default ?? 'ssa-pix-core'
@@ -172,14 +235,11 @@ function buildAlertFromTemplate(template: WorkflowAsset): AppHubAlert {
   }
 }
 
-function buildInstance(template: WorkflowAsset): WorkflowInstance {
-  const steps: StepInstance[] = template.onboardingSteps.map((s, i) => ({
-    id: s.id,
-    title: s.title,
-    status: i === 0 ? 'in-progress' : 'pending',
-  }))
-  const now = new Date().toISOString()
-  const pendingAgenticFlow: PendingAgenticFlowItem[] = template.onboardingSteps
+function buildPendingAgenticFromTemplate(
+  template: WorkflowAsset,
+  createdAt: string,
+): PendingAgenticFlowItem[] {
+  return template.onboardingSteps
     .filter((s) => s.agentic)
     .map((s) => {
       const meta = s.agentic!
@@ -202,130 +262,178 @@ function buildInstance(template: WorkflowAsset): WorkflowInstance {
         filesChanged: meta.files.length,
         linesAdded: added,
         linesRemoved: removed,
-        createdAt: now,
+        createdAt,
       }
     })
+}
+
+function buildWorkflowFromTemplate(template: WorkflowAsset): Workflow {
+  const now = new Date().toISOString()
+  const steps: WorkflowStep[] = template.onboardingSteps.map((s, i) => ({
+    id: s.id,
+    slug: s.id,
+    name: s.title,
+    description: s.description,
+    isCompleted: false,
+    canProgress: s.completedOnClick,
+    // legacy
+    title: s.title,
+    status: i === 0 ? 'in-progress' : 'pending',
+    startedAt: i === 0 ? now : undefined,
+  }))
+  const legacySteps: StepInstance[] = steps.map((s) => ({
+    id: s.id,
+    title: s.title,
+    status: s.status,
+    startedAt: s.startedAt,
+    completedAt: s.completedAt,
+  }))
   return {
     id: `wfi-${Math.random().toString(36).slice(2, 8)}`,
+    slug: template.id,
+    name: template.name,
+    description: template.description,
+    steps,
+    infraOnPlat: [],
+    workflowsOnPlat: [],
+    // legacy
     templateId: template.id,
     templateName: template.name,
     status: steps.length > 0 ? 'running' : 'draft',
     startedAt: now,
-    steps: steps.map((s, i) =>
-      i === 0 ? { ...s, startedAt: now } : s,
-    ),
+    legacySteps,
     currentStepIndex: 0,
-    pendingAgenticFlow,
+    pendingAgenticFlow: buildPendingAgenticFromTemplate(template, now),
   }
 }
 
+/** Reconcilia legacy `status`/`legacySteps`/`currentStepIndex` a partir do array novo `steps[]`. */
+function reconcileLegacyFields(wf: Workflow): Workflow {
+  const firstUnfinished = wf.steps.findIndex((s) => !s.isCompleted)
+  const currentStepIndex =
+    firstUnfinished < 0 ? wf.steps.length : firstUnfinished
+  const allDone = wf.steps.every((s) => s.isCompleted)
+  const status: WorkflowStatus = allDone
+    ? 'completed'
+    : wf.status === 'draft'
+    ? 'running'
+    : wf.status
+  const legacySteps: StepInstance[] = wf.steps.map((s) => ({
+    id: s.id,
+    title: s.title,
+    status: s.status,
+    startedAt: s.startedAt,
+    completedAt: s.completedAt,
+  }))
+  return { ...wf, status, currentStepIndex, legacySteps }
+}
+
+// =============================================================================
+// Provider
+// =============================================================================
+
 export function WorkflowsProvider({ children }: { children: ReactNode }) {
-  const [workflows, setWorkflows] = useState<WorkflowInstance[]>([])
-  const [applicationHubs, setApplicationHubs] = useState<ApplicationHub[]>(
-    applicationHubsSeed,
-  )
+  const [workflows, setWorkflows] = useState<Workflow[]>([])
+  const [extraHubs, setExtraHubs] = useState<ApplicationHub[]>(applicationHubsSeed)
   const [appHubAlerts, setAppHubAlerts] = useState<AppHubAlert[]>([])
 
-  const getWorkflow = useCallback(
-    (workflowId: string) => workflows.find((w) => w.id === workflowId),
-    [workflows],
-  )
+  // ---- CRUD ----
 
-  const addWorkflow = useCallback(
-    (templateOrAsset: string | WorkflowAsset): WorkflowInstance | null => {
+  const createWorkflow = useCallback(
+    (templateOrAsset: string | WorkflowAsset): Workflow | null => {
       const template =
         typeof templateOrAsset === 'string'
-          ? workflowTemplates.find((w) => w.id === templateOrAsset)
+          ? workflowTemplates.find((w) => w.id === templateOrAsset) ??
+            findTemplateById(templateOrAsset)
           : templateOrAsset
       if (!template) return null
-      const instance = buildInstance(template)
-      setWorkflows((prev) => [...prev, instance])
-      return instance
+      const wf = buildWorkflowFromTemplate(template)
+      setWorkflows((prev) => [...prev, wf])
+      return wf
     },
     [],
   )
 
+  const getWorkflow = useCallback(
+    (id: string) => workflows.find((w) => w.id === id),
+    [workflows],
+  )
+
+  const updateWorkflow = useCallback(
+    (id: string, update: Partial<Workflow>) => {
+      setWorkflows((prev) =>
+        prev.map((wf) =>
+          wf.id === id ? reconcileLegacyFields({ ...wf, ...update }) : wf,
+        ),
+      )
+    },
+    [],
+  )
+
+  const deleteWorkflow = useCallback((id: string) => {
+    setWorkflows((prev) => prev.filter((wf) => wf.id !== id))
+  }, [])
+
+  // ---- Façades sobre o CRUD ----
+
+  const addWorkflow = createWorkflow
+
   const advanceStep = useCallback((workflowId: string) => {
-    let trajectoryEnded: WorkflowInstance | null = null
-    let finalStepTrigger: WorkflowAsset | null = null
+    let trajectoryEnded: Workflow | null = null
+
     setWorkflows((prev) => {
       const next = prev.map((wf) => {
         if (wf.id !== workflowId) return wf
         if (wf.status === 'completed' || wf.status === 'failed') return wf
 
         const now = new Date().toISOString()
-        const idx = wf.currentStepIndex
-        if (idx < 0 || idx >= wf.steps.length) return wf
+        const idx = wf.steps.findIndex((s) => !s.isCompleted)
+        if (idx < 0) return wf
 
-        // Olha pra próxima posição: se for um step marcado finalStep, a
-        // trajetória do usuário é considerada concluída na entrada — o
-        // finalStep é eager-completed junto com o avanço.
-        const nextStepId = wf.steps[idx + 1]?.id
-        const tmpl = findTemplateById(wf.templateId)
-        const nextTmplStep = nextStepId
-          ? tmpl?.onboardingSteps.find((s) => s.id === nextStepId)
-          : undefined
-        const enteringFinal = !!nextTmplStep?.finalStep
-
-        const steps = wf.steps.map((s, i) => {
-          if (i === idx) return { ...s, status: 'done' as const, completedAt: now }
-          if (i === idx + 1) {
-            if (enteringFinal) {
-              return {
-                ...s,
-                status: 'done' as const,
-                startedAt: now,
-                completedAt: now,
-              }
+        const steps: WorkflowStep[] = wf.steps.map((s, i) => {
+          if (i === idx) {
+            return {
+              ...s,
+              isCompleted: true,
+              status: 'done' as const,
+              completedAt: now,
             }
-            return { ...s, status: 'in-progress' as const, startedAt: now }
+          }
+          if (i === idx + 1) {
+            return {
+              ...s,
+              status: 'in-progress' as const,
+              startedAt: now,
+            }
           }
           return s
         })
 
-        const naturallyEnded = idx + 1 >= wf.steps.length
-        const reachedEnd = naturallyEnded || enteringFinal
-        const updated: WorkflowInstance = {
-          ...wf,
-          steps,
-          currentStepIndex: reachedEnd ? wf.steps.length : idx + 1,
-          status: reachedEnd ? 'completed' : wf.status === 'draft' ? 'running' : wf.status,
-        }
-        if (reachedEnd) trajectoryEnded = updated
-        if (enteringFinal && nextTmplStep?.triggers) {
-          finalStepTrigger = nextTmplStep.triggers
-        }
-        return updated
+        const reconciled = reconcileLegacyFields({ ...wf, steps })
+        if (reconciled.status === 'completed') trajectoryEnded = reconciled
+        return reconciled
       })
       return next
     })
 
+    // Provision infraOnPlat + alerta na conclusão da trajetória do workflow primário
     if (trajectoryEnded) {
-      const template = findTemplateById((trajectoryEnded as WorkflowInstance).templateId)
+      const ended = trajectoryEnded as Workflow
+      const template = findTemplateById(ended.slug)
       if (template && !executionTemplateIds.has(template.id)) {
-        // Só primárias (onboarding) criam Application Hub + alerta —
-        // execuções ligadas terminam em silêncio.
         const hub = buildHubFromTemplate(template)
-        setApplicationHubs((prev) =>
-          prev.some((h) => h.id === hub.id) ? prev : [...prev, hub],
+        setWorkflows((prev) =>
+          prev.map((wf) =>
+            wf.id === ended.id && !wf.infraOnPlat.some((h) => h.id === hub.id)
+              ? { ...wf, infraOnPlat: [...wf.infraOnPlat, hub] }
+              : wf,
+          ),
         )
         const alert = buildAlertFromTemplate(template)
         setAppHubAlerts((prev) =>
           prev.some((a) => a.id === alert.id) ? prev : [...prev, alert],
         )
       }
-    }
-
-    // Auto-completar um finalStep ainda precisa disparar os `triggers` que
-    // o step carrega (no caso, `hmlPromotionWorkflow`) — o usuário não vai
-    // clicar manualmente nele, então o provider que cuide.
-    if (finalStepTrigger) {
-      const captured = finalStepTrigger as WorkflowAsset
-      setWorkflows((prev) =>
-        prev.some((w) => w.templateId === captured.id)
-          ? prev
-          : [...prev, buildInstance(captured)],
-      )
     }
   }, [])
 
@@ -335,43 +443,109 @@ export function WorkflowsProvider({ children }: { children: ReactNode }) {
     )
   }, [])
 
-  const resolveAgenticItem = useCallback((workflowId: string, stepId: string) => {
-    setWorkflows((prev) =>
-      prev.map((wf) =>
-        wf.id === workflowId
-          ? {
-              ...wf,
-              pendingAgenticFlow: wf.pendingAgenticFlow.filter(
+  const resolveAgenticItem = useCallback(
+    (workflowId: string, stepId: string) => {
+      setWorkflows((prev) =>
+        prev.map((wf) => {
+          if (wf.id !== workflowId) return wf
+          // Atualiza dois caminhos: o legacy `pendingAgenticFlow` (filtra fora)
+          // e o novo `workflowsOnPlat[].steps[].isApprovedByHuman` (sem reverter
+          // — assumimos aprovação por simplicidade no wireframe).
+          return {
+            ...wf,
+            pendingAgenticFlow: wf.pendingAgenticFlow.filter(
+              (item) => item.stepId !== stepId,
+            ),
+            workflowsOnPlat: wf.workflowsOnPlat.map((ew) => ({
+              ...ew,
+              steps: ew.steps.map((s) =>
+                s.slug === stepId && s.needHumanApproval
+                  ? { ...s, isApprovedByHuman: true }
+                  : s,
+              ),
+              pendingAgenticFlow: ew.pendingAgenticFlow.filter(
                 (item) => item.stepId !== stepId,
               ),
-            }
-          : wf,
-      ),
-    )
-  }, [])
+            })),
+          }
+        }),
+      )
+    },
+    [],
+  )
+
+  // Backward-compat: `applicationHubs` flatten infraOnPlat de todos os workflows
+  // somado com a seed estática (vazia por enquanto).
+  const applicationHubs = useMemo<ApplicationHub[]>(() => {
+    const fromWorkflows = workflows.flatMap((w) => w.infraOnPlat)
+    const all = [...extraHubs, ...fromWorkflows]
+    const seen = new Set<string>()
+    const deduped: ApplicationHub[] = []
+    for (const h of all) {
+      if (!seen.has(h.id)) {
+        seen.add(h.id)
+        deduped.push(h)
+      }
+    }
+    return deduped
+  }, [workflows, extraHubs])
+
+  // Para o WorkflowTrackerList: combina workflows primários + execuções aninhadas
+  // sob o mesmo array no contexto, pra que filtros existentes continuem
+  // funcionando. Cada ExecutionWorkflow expõe os mesmos campos legacy de
+  // Workflow, então o filtro `executionTemplateIds.has(w.templateId)` ainda casa.
+  const workflowsExposed = useMemo<Workflow[]>(() => {
+    const expanded: Workflow[] = []
+    for (const wf of workflows) {
+      expanded.push(wf)
+      for (const ew of wf.workflowsOnPlat) {
+        expanded.push({
+          ...ew,
+          // Tipos diferem em `steps`/`infraOnPlat`/`workflowsOnPlat`; pra render
+          // legacy o WorkflowTrackerList usa templateId/templateName/legacySteps
+          // que estão presentes em ambos.
+          steps: [],
+          infraOnPlat: [],
+          workflowsOnPlat: [],
+        } as Workflow)
+      }
+    }
+    return expanded
+  }, [workflows])
 
   const value = useMemo<WorkflowsContextValue>(
     () => ({
-      workflows,
+      workflows: workflowsExposed,
+      createWorkflow,
+      getWorkflow,
+      updateWorkflow,
+      deleteWorkflow,
       applicationHubs,
       appHubAlerts,
-      getWorkflow,
       addWorkflow,
       advanceStep,
       advanceStatus,
       resolveAgenticItem,
     }),
     [
-      workflows,
+      workflowsExposed,
+      createWorkflow,
+      getWorkflow,
+      updateWorkflow,
+      deleteWorkflow,
       applicationHubs,
       appHubAlerts,
-      getWorkflow,
       addWorkflow,
       advanceStep,
       advanceStatus,
       resolveAgenticItem,
     ],
   )
+
+  // Use `extraHubs` so React knows the seed was consumed; the variable is
+  // referenced inside `applicationHubs` derivation above.
+  void extraHubs
+  void setExtraHubs
 
   return <WorkflowsContext.Provider value={value}>{children}</WorkflowsContext.Provider>
 }

@@ -156,33 +156,39 @@
 
 **Implicação de UX**: agora o hub `ahub-ssa-pix-core` só aparece na tabela do Application Hub depois que o usuário conclui o último step da Migração Vanilla. Antes, podia aparecer mais cedo quando o `migrationExecutionWorkflow` chegava ao fim (que tipicamente ocorre antes do step-07 do primário).
 
-## 2026-05-15 — finalStep prop + render dedicado de "Último passo"
+## 2026-05-15 — Feature `finalStep` removida
+
+**Motivação**: depois de várias iterações sobre o comportamento de "último passo" (renderização dedicada, auto-completion na entrada, disparo automático de triggers), decidi remover a feature inteira pra simplificar o modelo.
 
 **Mudanças**
-- `OnboardingStep` ganhou `finalStep?: boolean` em `database.ts`. step-07-promote-hml marcado com `finalStep: true`.
-- Tipo local `OnboardingStep` em `01-Home.tsx` ganhou o mesmo flag; mapping populando a partir do template.
-- `OnboardingCard` refatorado: separa `regularSteps` (sem finalStep) de `finalSteps` (com finalStep, hoje sempre 1). Cálculo de progresso (`doneCount`, `total`, `pct`) usa só os regulares — quando todos os regulares estão `done`, a barra mostra 100% mesmo com o finalStep ainda em curso. Atende ao requisito "fluxo já está 100% completo".
-- O finalStep é renderizado **fora** da lista principal, em uma seção dedicada com `border-t` separadora: bg `accent/[0.06]` quando ativo (todos regulares done), `opacity-60` quando ainda bloqueado pelos regulares. Header da seção tem badge "último passo" (accent) e label "fluxo 100% completo" (success) quando aplicável. Reusa `OnboardingStepRow` pra manter consistência visual.
-- Comportamento: clicar no finalStep continua chamando `onActivate(step)` → segue o mesmo fluxo de advance + triggers (`hmlPromotionWorkflow`). Após advance, status do workflow vira `completed` e `CongratsAlert` substitui o card.
+- `OnboardingStep.finalStep?: boolean` removido do tipo em `database.ts`. step-07-promote-hml volta a ser um passo normal (mantém `completedOnClick: true` e `triggers: hmlPromotionWorkflow`).
+- `WorkflowsProvider.advanceStep` simplificado: remove `enteringFinal` lookup, `finalStepTrigger` capture e o branch de auto-completion. Hub + alerta são emitidos só na conclusão natural (último step `done`).
+- Helper `buildExecutionFromTemplate` removido (era usado só pelo trigger automático do finalStep).
+- Tipo local `OnboardingStep` em `01-Home.tsx` perdeu o flag. `OnboardingCard` voltou a renderizar uma única lista sequencial — sem split `regularSteps` vs `finalSteps`, sem seção "último passo".
+- Badge `final-step` removido do detalhe do `06-AssetsCatalog.tsx`. Import `Flag` (lucide) limpo.
+- Specs atualizadas (`00-master-context.md`, `01-home.md`, `04-aplication-hub.md`, `06-assets-catalog.md`, `components/onboarding-card.md`) — todas as menções a `finalStep` removidas.
 
-## 2026-05-15 — Hub eager-add ao entrar no finalStep
+**Fluxo atual**: usuário clica step-07 manualmente → `advanceStep` no provider conclui o passo → workflow vira `completed` → `Home.handleStepActivate` dispara `addWorkflow(triggers)` (`hmlPromotionWorkflow`) → hub criado em `infraOnPlat`, alerta criado, `CongratsAlert` substitui o card.
 
-**Mudança**
-- `WorkflowsProvider.advanceStep` ganhou variável local `enteredFinalStep` (irmã do `justFinished`). Durante o `setWorkflows`, depois de calcular o novo `currentStepIndex`, verifica se o step apontado pelo novo índice é `finalStep: true` no template. Se sim, captura a instância em `enteredFinalStep`.
-- Fora do setState, `hubTarget = justFinished ?? enteredFinalStep` é usado pra criação do `ApplicationHub` via `buildHubFromTemplate` + `setApplicationHubs` com dedupe por `hub.id`. Guard `isPrimary` continua valendo — só `migrationWorkflow` (não execuções) cria hub.
-- O `buildAlertFromTemplate` continua sendo emitido **somente** quando `justFinished` (não `enteredFinalStep`) — semanticamente o alerta de "infra parcial" é um post-mortem que só faz sentido após o pipeline completar.
-- Efeito de UX: na hora que o usuário avança do step-06 pro step-07 (finalStep), o hub `ahub-ssa-pix-core` (`Pix Core`) já aparece na tabela do `ApplicationHub.tsx`. Antes só aparecia depois do clique final no CTA "Promover pra HML".
-- `ApplicationHub.tsx` em si não mudou — continua consumindo `useWorkflows().applicationHubs`. A mudança é toda na lógica de criação no provider.
+## 2026-05-15 — Refactor WorkflowsProvider per `specs/context/worflow-context.md`
 
-## 2026-05-15 — Eager-complete da trajetória ao entrar no finalStep
+**Mudanças no provider** (`src/contexts/WorkflowsProvider.tsx`)
+- Tipos novos alinhados com a spec:
+  - `Workflow` (id, slug, name, description, steps, infraOnPlat, workflowsOnPlat) — a forma canônica do workflow do usuário.
+  - `WorkflowStep` (id, slug, name, description, `isCompleted: boolean`, `canProgress: boolean`).
+  - `ExecutionStep` (`type: 'Inference' | 'Computacional'`, name, slug, `needHumanApproval`, `isApprovedByHuman: boolean | null`).
+  - `ExecutionWorkflow` (id, slug, name, description, steps, currentStep).
+- CRUD por spec: `createWorkflow`, `getWorkflow`, `updateWorkflow`, `deleteWorkflow`. Todos operam sobre o estado central `workflows: Workflow[]`.
+- Estrutura nested: infra provisionada (`infraOnPlat`) e workflows agênticos disparados (`workflowsOnPlat`) ficam DENTRO do workflow primário — antes eram top-level. `applicationHubs` virou um derived getter via `useMemo` flatten de `workflows.flatMap(w => w.infraOnPlat)` + seed estático.
+- Façade-pattern pra back-compat: `addWorkflow` é alias de `createWorkflow`; `advanceStep` agora opera em `WorkflowStep.isCompleted` (em vez de `StepInstance.status`); `resolveAgenticItem` atualiza dois caminhos — o legacy `pendingAgenticFlow` (filter out) e o novo `workflowsOnPlat[].steps[].isApprovedByHuman`.
+- Cada `Workflow` carrega ambas as representações: campos novos (spec-aligned) E campos legacy (`templateId`, `templateName`, `status`, `currentStepIndex`, `legacySteps`, `pendingAgenticFlow`, `startedAt`). `reconcileLegacyFields` mantém os legacy fields consistentes a cada update — derivando `status`/`currentStepIndex`/`legacySteps` a partir de `steps[].isCompleted`.
 
-**Mudança**
-- `advanceStep` agora unifica os branches "naturally ended" e "entering finalStep" em uma única flag `reachedEnd = naturallyEnded || enteringFinal`. Quando entra num finalStep, ambos os mapeamentos acontecem na mesma iteração: step anterior vira `done` (completedAt = now) e o **finalStep também vira `done` imediatamente** (startedAt + completedAt = now). `currentStepIndex` salta direto pra `steps.length` e `status` vira `'completed'`.
-- O hub do Application Hub + o alerta da Application Hub agora são emitidos pelo mesmo branch unificado (`trajectoryEnded`). Antes o alerta só saía no caminho "naturally ended"; com a unificação, entrar em finalStep também produz o alerta (semanticamente consistente — a trajetória terminou).
-- Trigger do finalStep precisa disparar mesmo sem clique manual. Adicionei `finalStepTrigger: WorkflowAsset | null` capturada durante o map; depois do setState, se houver, chama `buildInstance(captured)` + `setWorkflows([...prev, instance])` com dedupe por `templateId`. Resultado: `hmlPromotionWorkflow` aparece no Workflow Tracker automaticamente.
-- Removido o handler antigo "alerta só na conclusão" (era um bloco separado) — a unificação cobre o caso.
+**workflowsExposed (compat shim pro WorkflowTrackerList)**
+- O contexto expõe `workflows` como um array "achatado" que junta o workflow primário + as execuções nested (`workflowsOnPlat`). Isso preserva o filtro existente `executionTemplateIds.has(w.templateId)` no WorkflowTrackerList sem precisar refatorar a tela. Tradeoff: a relação parent-child fica perdida nessa visão, mas os campos legacy bastam pro render atual.
 
-**Efeito de UX**
-- Concluir step-06 (último regular) → step-07 (finalStep) é entrado **e** já marcado `done` no mesmo frame. `workflow.status` vira `completed`. Home substitui `OnboardingCard` pelo `CongratsAlert`. `Application Hub` mostra `Pix Core (ssa-pix-core)`. `Workflow Tracker` lista a instância do `hmlPromotionWorkflow`.
-- A seção "último passo" do `OnboardingCard` (do bloco anterior) deixa de ser vista no happy path — vira código defensivo pra casos onde um workflow tenha finalStep mas ainda não foi atingido (raro).
-- Triggers em finalStep agora podem ser disparados de **duas vias**: (a) Home.handleStepActivate, quando o usuário clica diretamente em um finalStep (`completedOnClick: true`); (b) provider, ao entrar no finalStep via advance de outro step. Dedupe `prev.some(w => w.templateId === captured.id)` impede instância duplicada.
+**Decisão**: não refatorei imediatamente os consumidores (Home/WorkflowTrackerList/ApplicationHub) pra usarem só os campos da spec (`slug`, `name`, `isCompleted`). A migração foi feita preservando os legacy aliases dentro do objeto `Workflow`, então:
+- A nova API canônica (CRUD + tipos spec) está disponível pra qualquer código novo.
+- A API legacy (`templateId`, `status === 'completed'`, `currentStepIndex`, `step.status === 'done'`) continua funcionando.
+- Consumidores podem migrar passo-a-passo no futuro.
+
+**Tipo de compatibilidade**: `WorkflowInstance` ficou como alias do `Workflow` novo (`export type WorkflowInstance = Workflow`).
