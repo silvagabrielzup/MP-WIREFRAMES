@@ -26,10 +26,16 @@ import {
   MoreHorizontal,
   Workflow as WorkflowIcon,
   GripHorizontal,
+  Sparkles,
+  Check,
+  GitPullRequest,
 } from 'lucide-react'
+import { migrationExecutionWorkflow, type AgenticPropositionMetadata } from '../data/database'
 
 type StepStatus = 'pending' | 'running' | 'success' | 'failed' | 'skipped'
-type Verb = 'build' | 'deploy' | 'migration' | 'rollout'
+type Verb = 'build' | 'agentic' | 'deploy' | 'migration' | 'rollout'
+
+type ApprovalState = 'pending' | 'accepted' | 'declined'
 
 type Step = {
   id: string
@@ -40,7 +46,15 @@ type Step = {
   duration?: string
   sensor?: { name: string; verdict: 'pass' | 'warn' | 'fail' }
   iterations?: number
+  /** Quando presente, indica que o step é agêntico — Accept/Decline obrigatório. */
+  agentic?: AgenticPropositionMetadata
 }
+
+const AGENTIC_STEP_ID = 'step-agentic-java-21'
+const agenticMetadata =
+  migrationExecutionWorkflow.onboardingSteps.find(
+    (s) => s.id === 'agentic-java-21-upgrade',
+  )?.agentic ?? null
 
 type Edge = {
   from: string
@@ -56,6 +70,14 @@ const steps: Step[] = [
   { id: 'step-1', verb: 'build', name: 'Clonar repositório', tool: 'github.clone', status: 'success', duration: '12s' },
   { id: 'step-2', verb: 'build', name: 'Build do mono-repo', tool: 'konstructor.build', status: 'success', duration: '1m 47s', iterations: 3 },
   { id: 'step-3', verb: 'build', name: 'Scan de dependências', tool: 'konstructor.sbom', status: 'success', duration: '24s', sensor: { name: 'cve-scan-deps', verdict: 'pass' } },
+  {
+    id: AGENTIC_STEP_ID,
+    verb: 'agentic',
+    name: 'Upgrade Java 8 → 21 (agêntico)',
+    tool: 'konstructor.java-bot',
+    status: 'pending',
+    agentic: agenticMetadata ?? undefined,
+  },
   { id: 'step-4', verb: 'deploy', name: 'Avaliar policies Komply', tool: 'komply.evaluate', status: 'success', duration: '8s', sensor: { name: 'policy-gate', verdict: 'pass' } },
   { id: 'step-5', verb: 'deploy', name: 'Provisionar infra (EKS)', tool: 'kaptain.deploy', status: 'running', duration: '2m 14s' },
   { id: 'step-6', verb: 'deploy', name: 'Aplicar manifestos K8s', tool: 'orkestra.apply', status: 'pending' },
@@ -68,7 +90,8 @@ const steps: Step[] = [
 const edges: Edge[] = [
   { from: 'step-1', to: 'step-2' },
   { from: 'step-2', to: 'step-3' },
-  { from: 'step-3', to: 'step-4' },
+  { from: 'step-3', to: AGENTIC_STEP_ID },
+  { from: AGENTIC_STEP_ID, to: 'step-4' },
   { from: 'step-4', to: 'step-5' },
   { from: 'step-5', to: 'step-6', active: true },
   { from: 'step-6', to: 'step-7' },
@@ -97,6 +120,15 @@ const verbMeta: Record<
     bodyBg: 'bg-info/10',
     border: 'border-info/60',
     swatch: 'bg-info',
+  },
+  agentic: {
+    label: 'Agente',
+    icon: Sparkles,
+    text: 'text-accent',
+    headerBg: 'bg-accent',
+    bodyBg: 'bg-accent/10',
+    border: 'border-accent/60',
+    swatch: 'bg-accent',
   },
   deploy: {
     label: 'Deploy',
@@ -153,7 +185,7 @@ function nodeX(idx: number) {
 }
 const NODE_Y = ROW_Y
 
-const verbsOrder: Verb[] = ['build', 'deploy', 'migration', 'rollout']
+const verbsOrder: Verb[] = ['build', 'agentic', 'deploy', 'migration', 'rollout']
 
 type Phase = { verb: Verb; startIdx: number; endIdx: number; count: number }
 
@@ -194,20 +226,38 @@ function StepNode({
   step,
   idx,
   selected,
+  approval,
   onClick,
+  onApprove,
+  onDecline,
 }: {
   step: Step
   idx: number
   selected: boolean
+  approval: ApprovalState
   onClick: () => void
+  onApprove: () => void
+  onDecline: () => void
 }) {
   const x = nodeX(idx)
   const verb = verbMeta[step.verb]
   const VerbIcon = verb.icon
-  const isRunning = step.status === 'running'
-  const isFailed = step.status === 'failed'
-  const isPending = step.status === 'pending'
-  const isSkipped = step.status === 'skipped'
+
+  // For the agentic step, override the apparent status based on approval state.
+  const effectiveStatus: StepStatus =
+    step.verb === 'agentic'
+      ? approval === 'accepted'
+        ? 'success'
+        : approval === 'declined'
+        ? 'failed'
+        : 'running'
+      : step.status
+
+  const isRunning = effectiveStatus === 'running'
+  const isFailed = effectiveStatus === 'failed'
+  const isPending = effectiveStatus === 'pending'
+  const isSkipped = effectiveStatus === 'skipped'
+  const isAgenticPending = step.verb === 'agentic' && approval === 'pending'
 
   return (
     <button
@@ -215,9 +265,11 @@ function StepNode({
       style={{ left: x, top: NODE_Y, width: NODE_W, height: NODE_H }}
       className={`absolute overflow-hidden rounded-lg border bg-surface text-left transition hover:shadow-lg ${
         isFailed ? 'border-failure ring-1 ring-failure/30' : verb.border
-      } ${selected ? 'ring-2 ring-text-primary' : ''} ${isPending ? 'opacity-50' : ''} ${
-        isSkipped ? 'opacity-50 [border-style:dashed]' : ''
-      } ${isRunning ? `${verb.border} animate-pulse-live` : ''}`}
+      } ${selected ? 'ring-2 ring-text-primary' : ''} ${
+        step.verb !== 'agentic' && isPending ? 'opacity-50' : ''
+      } ${isSkipped ? 'opacity-50 [border-style:dashed]' : ''} ${
+        isRunning && step.verb !== 'agentic' ? `${verb.border} animate-pulse-live` : ''
+      } ${isAgenticPending ? 'shadow-[0_0_0_3px_rgba(255,107,44,0.18)]' : ''}`}
     >
       <div className={`flex h-7 items-center gap-1.5 px-2.5 ${verb.headerBg} text-black/90`}>
         <VerbIcon className="h-3 w-3" />
@@ -227,6 +279,11 @@ function StepNode({
             <span className="font-mono normal-case opacity-80"> · {step.tool.split('.')[0]}</span>
           )}
         </span>
+        {isAgenticPending && (
+          <span className="ml-auto rounded-full bg-black/30 px-1.5 py-0.5 text-[9.5px] font-mono uppercase tracking-wider text-black/90">
+            aprovação
+          </span>
+        )}
       </div>
 
       <span aria-hidden className={`absolute left-0 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-border ${verb.swatch}`} />
@@ -234,37 +291,94 @@ function StepNode({
 
       <div className={`flex flex-1 flex-col gap-1.5 px-3 py-2 ${verb.bodyBg}`}>
         <div className="flex items-center gap-2">
-          <StatusIcon status={step.status} />
+          <StatusIcon status={effectiveStatus} />
           <span className="truncate text-[12.5px] font-semibold text-text-primary">{step.name}</span>
         </div>
         {step.tool && (
           <div className="truncate font-mono text-[11px] text-text-secondary">{step.tool}</div>
         )}
         <div className="mt-auto flex items-center gap-1.5">
-          {step.duration && (
-            <span className="rounded border border-border bg-bg/80 px-1.5 py-0.5 font-mono text-[10px] text-text-muted">
-              {step.duration}
-            </span>
-          )}
-          {step.sensor && (
-            <span
-              className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium ${
-                step.sensor.verdict === 'pass'
-                  ? 'border-success/30 bg-success/10 text-success'
-                  : step.sensor.verdict === 'warn'
-                  ? 'border-warning/30 bg-warning/10 text-warning'
-                  : 'border-failure/30 bg-failure/10 text-failure'
-              }`}
-            >
-              <ShieldCheck className="h-2.5 w-2.5" />
-              {step.sensor.name}
-            </span>
-          )}
-          {step.iterations && step.iterations > 1 && (
-            <span className="inline-flex items-center gap-1 rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent">
-              <RotateCw className="h-2.5 w-2.5" />
-              {step.iterations}
-            </span>
+          {isAgenticPending ? (
+            <>
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDecline()
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    onDecline()
+                  }
+                }}
+                className="inline-flex cursor-pointer items-center gap-1 rounded border border-failure/30 bg-failure/10 px-1.5 py-0.5 text-[10px] font-medium text-failure hover:bg-failure/15"
+              >
+                <X className="h-2.5 w-2.5" />
+                Declinar
+              </span>
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onApprove()
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    onApprove()
+                  }
+                }}
+                className="inline-flex cursor-pointer items-center gap-1 rounded border border-success/30 bg-success/10 px-1.5 py-0.5 text-[10px] font-medium text-success hover:bg-success/15"
+              >
+                <Check className="h-2.5 w-2.5" />
+                Aprovar
+              </span>
+            </>
+          ) : (
+            <>
+              {step.duration && (
+                <span className="rounded border border-border bg-bg/80 px-1.5 py-0.5 font-mono text-[10px] text-text-muted">
+                  {step.duration}
+                </span>
+              )}
+              {step.sensor && (
+                <span
+                  className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium ${
+                    step.sensor.verdict === 'pass'
+                      ? 'border-success/30 bg-success/10 text-success'
+                      : step.sensor.verdict === 'warn'
+                      ? 'border-warning/30 bg-warning/10 text-warning'
+                      : 'border-failure/30 bg-failure/10 text-failure'
+                  }`}
+                >
+                  <ShieldCheck className="h-2.5 w-2.5" />
+                  {step.sensor.name}
+                </span>
+              )}
+              {step.iterations && step.iterations > 1 && (
+                <span className="inline-flex items-center gap-1 rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent">
+                  <RotateCw className="h-2.5 w-2.5" />
+                  {step.iterations}
+                </span>
+              )}
+              {step.verb === 'agentic' && approval === 'accepted' && (
+                <span className="inline-flex items-center gap-1 rounded border border-success/30 bg-success/10 px-1.5 py-0.5 text-[10px] font-medium text-success">
+                  <Check className="h-2.5 w-2.5" />
+                  aprovado
+                </span>
+              )}
+              {step.verb === 'agentic' && approval === 'declined' && (
+                <span className="inline-flex items-center gap-1 rounded border border-failure/30 bg-failure/10 px-1.5 py-0.5 text-[10px] font-medium text-failure">
+                  <X className="h-2.5 w-2.5" />
+                  declinado
+                </span>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -327,7 +441,13 @@ function EdgeLayer({ selectedId }: { selectedId: string | null }) {
         const isCross = fromStep.verb !== toStep.verb
 
         const verbToken = (v: Verb) =>
-          v === 'build' ? 'info' : v === 'deploy' ? 'success' : v === 'migration' ? 'warning' : 'accent'
+          v === 'build'
+            ? 'info'
+            : v === 'deploy'
+            ? 'success'
+            : v === 'migration'
+            ? 'warning'
+            : 'accent' // 'rollout' and 'agentic' both share accent
 
         const stroke = e.failedPath
           ? 'stroke-failure'
@@ -444,10 +564,16 @@ function Canvas({
   selectedId,
   onSelect,
   onJumpToVerb,
+  approval,
+  onApprove,
+  onDecline,
 }: {
   selectedId: string | null
   onSelect: (id: string) => void
   onJumpToVerb: (v: Verb) => void
+  approval: ApprovalState
+  onApprove: () => void
+  onDecline: () => void
 }) {
   const failedStep = steps.find((s) => s.status === 'failed')
   return (
@@ -485,7 +611,10 @@ function Canvas({
               step={s}
               idx={i}
               selected={selectedId === s.id}
+              approval={approval}
               onClick={() => onSelect(s.id)}
+              onApprove={onApprove}
+              onDecline={onDecline}
             />
           ))}
         </div>
@@ -551,11 +680,157 @@ function Canvas({
   )
 }
 
+function AgenticPrDiff({
+  metadata,
+  approval,
+  onApprove,
+  onDecline,
+}: {
+  metadata: AgenticPropositionMetadata
+  approval: ApprovalState
+  onApprove: () => void
+  onDecline: () => void
+}) {
+  const [openFile, setOpenFile] = useState<string>(metadata.files[0]?.path ?? '')
+  const file = metadata.files.find((f) => f.path === openFile) ?? metadata.files[0]
+  return (
+    <div className="space-y-3 px-4 py-3">
+      <div className="rounded-md border border-accent/30 bg-accent/[0.05] px-3 py-2.5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-2">
+            <GitPullRequest className="mt-0.5 h-4 w-4 flex-none text-accent" />
+            <div>
+              <div className="text-[12.5px] font-semibold text-text-primary">
+                {metadata.prTitle}
+              </div>
+              <div className="mt-0.5 font-mono text-[10.5px] text-text-muted">
+                {metadata.prAuthor}
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-none items-center gap-1.5">
+            {approval === 'pending' && (
+              <>
+                <button
+                  type="button"
+                  onClick={onDecline}
+                  className="inline-flex h-7 items-center gap-1 rounded-md border border-failure/40 bg-failure/10 px-2 text-[11px] font-medium text-failure hover:bg-failure/15"
+                >
+                  <X className="h-3 w-3" />
+                  Declinar
+                </button>
+                <button
+                  type="button"
+                  onClick={onApprove}
+                  className="inline-flex h-7 items-center gap-1 rounded-md border border-success/40 bg-success/10 px-2 text-[11px] font-medium text-success hover:bg-success/15"
+                >
+                  <Check className="h-3 w-3" />
+                  Aprovar
+                </button>
+              </>
+            )}
+            {approval === 'accepted' && (
+              <span className="inline-flex items-center gap-1 rounded-md border border-success/40 bg-success/10 px-2 py-1 text-[11px] font-medium text-success">
+                <Check className="h-3 w-3" />
+                Aprovado
+              </span>
+            )}
+            {approval === 'declined' && (
+              <span className="inline-flex items-center gap-1 rounded-md border border-failure/40 bg-failure/10 px-2 py-1 text-[11px] font-medium text-failure">
+                <X className="h-3 w-3" />
+                Declinado
+              </span>
+            )}
+          </div>
+        </div>
+        <p className="mt-2 text-[11.5px] text-text-secondary">{metadata.prSummary}</p>
+      </div>
+
+      <div className="grid grid-cols-[200px_1fr] gap-3">
+        <div className="space-y-1">
+          <div className="px-1 text-[10px] uppercase tracking-wider text-text-muted">
+            {metadata.files.length} arquivos
+          </div>
+          {metadata.files.map((f) => {
+            const adds = f.hunks.flatMap((h) => h.lines.filter((l) => l.kind === 'add')).length
+            const dels = f.hunks.flatMap((h) => h.lines.filter((l) => l.kind === 'del')).length
+            return (
+              <button
+                key={f.path}
+                type="button"
+                onClick={() => setOpenFile(f.path)}
+                className={`flex w-full items-start gap-1.5 rounded border px-2 py-1.5 text-left font-mono text-[10.5px] transition ${
+                  openFile === f.path
+                    ? 'border-accent/40 bg-accent/[0.08] text-text-primary'
+                    : 'border-border bg-bg text-text-secondary hover:border-border-strong hover:text-text-primary'
+                }`}
+              >
+                <FileText className="mt-0.5 h-3 w-3 flex-none opacity-60" />
+                <span className="flex-1 break-all leading-tight">{f.path}</span>
+                <span className="flex flex-none items-center gap-1 text-[9.5px]">
+                  <span className="text-success">+{adds}</span>
+                  <span className="text-failure">−{dels}</span>
+                </span>
+              </button>
+            )
+          })}
+        </div>
+        <div className="overflow-hidden rounded border border-border bg-bg">
+          <div className="flex items-center justify-between border-b border-border bg-[#0B0C10] px-3 py-1.5">
+            <span className="font-mono text-[11px] text-text-primary">{file?.path}</span>
+            <span className="font-mono text-[10px] uppercase tracking-wider text-text-muted">
+              {file?.language}
+            </span>
+          </div>
+          <div className="max-h-[360px] overflow-y-auto">
+            {file?.hunks.map((h, hi) => (
+              <div key={hi} className="border-b border-border last:border-b-0">
+                <div className="bg-[#0B0C10] px-3 py-1 font-mono text-[10.5px] text-text-muted">
+                  {h.header}
+                </div>
+                <pre className="overflow-x-auto px-0 py-1 font-mono text-[11px] leading-[1.5]">
+                  {h.lines.map((line, li) => {
+                    const tone =
+                      line.kind === 'add'
+                        ? 'bg-success/10 text-success'
+                        : line.kind === 'del'
+                        ? 'bg-failure/10 text-failure'
+                        : 'text-text-secondary'
+                    const prefix =
+                      line.kind === 'add' ? '+' : line.kind === 'del' ? '−' : ' '
+                    return (
+                      <div
+                        key={li}
+                        className={`flex gap-2 px-3 ${tone}`}
+                      >
+                        <span className="w-3 select-none text-[10.5px] opacity-70">
+                          {prefix}
+                        </span>
+                        <span className="flex-1 whitespace-pre">{line.text}</span>
+                      </div>
+                    )
+                  })}
+                </pre>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function BottomSheet({
   stepId,
+  approval,
+  onApprove,
+  onDecline,
   onClose,
 }: {
   stepId: string
+  approval: ApprovalState
+  onApprove: () => void
+  onDecline: () => void
   onClose: () => void
 }) {
   const step = steps.find((s) => s.id === stepId)
@@ -564,6 +839,7 @@ function BottomSheet({
   const verb = verbMeta[step.verb]
   const VerbIcon = verb.icon
   const isIterated = (step.iterations ?? 1) > 1
+  const isAgentic = step.verb === 'agentic' && !!step.agentic
 
   return (
     <section className="rounded-lg border border-border bg-surface">
@@ -635,6 +911,14 @@ function BottomSheet({
         </div>
       </div>
 
+      {isAgentic && step.agentic ? (
+        <AgenticPrDiff
+          metadata={step.agentic}
+          approval={approval}
+          onApprove={onApprove}
+          onDecline={onDecline}
+        />
+      ) : (
       <div className="grid grid-cols-1 divide-border md:grid-cols-2 md:divide-x lg:grid-cols-4">
         <SheetCol title="Input">
           <pre className="overflow-x-auto rounded bg-[#0B0C10] p-2.5 font-mono text-[10.5px] leading-relaxed text-text-secondary">
@@ -705,6 +989,7 @@ function BottomSheet({
           </div>
         </SheetCol>
       </div>
+      )}
     </section>
   )
 }
@@ -918,9 +1203,13 @@ function CostTab() {
 export default function WorkflowTrackerDetail() {
   const { id } = useParams<{ id: string }>()
   const [tab, setTab] = useState<TabKey>('fluxo')
-  const [selectedId, setSelectedId] = useState<string | null>('step-5')
+  const [selectedId, setSelectedId] = useState<string | null>(AGENTIC_STEP_ID)
+  const [approval, setApproval] = useState<ApprovalState>('pending')
 
   const wfId = id ?? 'wf-abc123'
+
+  const handleApprove = () => setApproval('accepted')
+  const handleDecline = () => setApproval('declined')
 
   return (
     <div className="space-y-5">
@@ -1027,8 +1316,19 @@ export default function WorkflowTrackerDetail() {
             onJumpToVerb={() => {
               /* in a wireframe; would pan canvas */
             }}
+            approval={approval}
+            onApprove={handleApprove}
+            onDecline={handleDecline}
           />
-          {selectedId && <BottomSheet stepId={selectedId} onClose={() => setSelectedId(null)} />}
+          {selectedId && (
+            <BottomSheet
+              stepId={selectedId}
+              approval={approval}
+              onApprove={handleApprove}
+              onDecline={handleDecline}
+              onClose={() => setSelectedId(null)}
+            />
+          )}
         </section>
       )}
 

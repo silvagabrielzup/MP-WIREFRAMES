@@ -33,9 +33,20 @@ export type WorkflowInstance = {
   currentStepIndex: number
 }
 
+export type AppHubAlertKind = 'approval' | 'failure' | 'policy'
+
+export type AppHubAlert = {
+  id: string
+  kind: AppHubAlertKind
+  title: string
+  detail: string
+  ago: string
+}
+
 type WorkflowsContextValue = {
   workflows: WorkflowInstance[]
   applicationHubs: ApplicationHub[]
+  appHubAlerts: AppHubAlert[]
   getWorkflow: (workflowId: string) => WorkflowInstance | undefined
   addWorkflow: (templateOrAsset: string | WorkflowAsset) => WorkflowInstance | null
   advanceStep: (workflowId: string) => void
@@ -100,6 +111,24 @@ function buildHubFromTemplate(template: WorkflowAsset): ApplicationHub {
   }
 }
 
+/**
+ * Gera um alerta da Application Hub representando falha parcial na infra
+ * provisionada pelo workflow recém-concluído. Pensado pra surfar como
+ * "algo não subiu corretamente" mesmo o workflow tendo terminado.
+ */
+function buildAlertFromTemplate(template: WorkflowAsset): AppHubAlert {
+  const saInput = template.inputs.find((i) => i.name === 'sa_id')
+  const sa = saInput?.default ?? 'ssa-pix-core'
+  return {
+    id: `alert-${template.id}-infra-partial`,
+    kind: 'failure',
+    title: `Provisionamento parcial · ${sa}`,
+    detail:
+      'Pantheon não conseguiu criar o topic Kafka durante o rollout. Aplicação saudável, mas eventos não estão fluindo. Reaplique o template Kaptain para reconciliar.',
+    ago: 'agora',
+  }
+}
+
 function buildInstance(template: WorkflowAsset): WorkflowInstance {
   const steps: StepInstance[] = template.onboardingSteps.map((s, i) => ({
     id: s.id,
@@ -125,6 +154,7 @@ export function WorkflowsProvider({ children }: { children: ReactNode }) {
   const [applicationHubs, setApplicationHubs] = useState<ApplicationHub[]>(
     applicationHubsSeed,
   )
+  const [appHubAlerts, setAppHubAlerts] = useState<AppHubAlert[]>([])
 
   const getWorkflow = useCallback(
     (workflowId: string) => workflows.find((w) => w.id === workflowId),
@@ -182,6 +212,10 @@ export function WorkflowsProvider({ children }: { children: ReactNode }) {
         setApplicationHubs((prev) =>
           prev.some((h) => h.id === hub.id) ? prev : [...prev, hub],
         )
+        const alert = buildAlertFromTemplate(template)
+        setAppHubAlerts((prev) =>
+          prev.some((a) => a.id === alert.id) ? prev : [...prev, alert],
+        )
       }
     }
   }, [])
@@ -196,12 +230,21 @@ export function WorkflowsProvider({ children }: { children: ReactNode }) {
     () => ({
       workflows,
       applicationHubs,
+      appHubAlerts,
       getWorkflow,
       addWorkflow,
       advanceStep,
       advanceStatus,
     }),
-    [workflows, applicationHubs, getWorkflow, addWorkflow, advanceStep, advanceStatus],
+    [
+      workflows,
+      applicationHubs,
+      appHubAlerts,
+      getWorkflow,
+      addWorkflow,
+      advanceStep,
+      advanceStatus,
+    ],
   )
 
   return <WorkflowsContext.Provider value={value}>{children}</WorkflowsContext.Provider>

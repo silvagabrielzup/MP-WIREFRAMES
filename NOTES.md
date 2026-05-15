@@ -104,3 +104,22 @@
 **Decisão de ownership**: hubs runtime ficam no `WorkflowsProvider` em vez de criar um `ApplicationHubsProvider` separado, porque a criação é estritamente reativa a eventos de workflow — separar adicionaria boilerplate sem ganho. Se no futuro um hub puder ser criado fora desse fluxo, vale extrair.
 
 **Decisão sobre lookup tables**: `SA_TO_PROJECT` e `SA_TO_SQUAD` ficam no provider em vez do `database.ts` porque são heurísticas de geração (mock), não dados canônicos. Fallback `proj-${baseName}` / `squad-${baseName}` cobre SAs novas que apareçam nos inputs de futuros workflows.
+
+## 2026-05-15 — Modal multi-repo + stepper agêntico Java 21
+
+**Modal step-03 (`01-Home.tsx`)** — três passos agora:
+- **Step 1 — Busca por Serviço de Aplicação**: input pega a SA (`ssa-pix-core`). Resultado mostra metadata do serviço (org/SA, squad, descrição) + lista de 5 repos da família (código, ci/cd, infra, db, config) com ícone por kind, stack, tamanho e último commit. Modelando a arquitetura real onde cada faceta da app vive em um repo separado pré-migração.
+- **Step 2 — Estrutura mono-repo**: grid Antes vs Depois. Antes empilha 5 árvores independentes (uma por repo); Depois mostra a estrutura unificada em `apps/ssa-pix-core/{src, ci, infra, db, config}` com tooling Vanilla (`komply.yaml`, `orkestra.yaml`, `tooling/vanilla.lock`) adicionada. `TreeNodeView` reutilizado — chevron + Folder/FolderOpen + indentação por depth. Cada árvore "Antes" fica em sua própria caixinha pra deixar claro que são repos distintos.
+- **Step 3 — Débitos técnicos resolvidos**: lista 6 itens plausíveis de infra (Jenkins free-form, secrets em repo, sem auto-rollback, CVE scan ausente, dashboards ad-hoc, schema manual) cada um com par "Hoje (problema)" / "Pós-migração (solução)". Footer do modal navega 1→2→3 com Voltar/Próximo + Confirmar migração no final.
+
+**Stepper agêntico (`03-WorkflowTrackerDetail.tsx`)**:
+- `Verb` ganhou `'agentic'` (5º verb, cor accent + ícone `Sparkles`). `verbsOrder` atualizado.
+- Novo step `step-agentic-java-21` injetado entre `step-3` (build/scan) e `step-4` (deploy/policies). Edges roteadas: `step-3 → agentic → step-4`. Phase strip mostra "Agente · 1" entre Build e Deploy.
+- `ApprovalState = 'pending' | 'accepted' | 'declined'` no estado do componente top-level. `effectiveStatus` no `StepNode` deriva do approval pra o nó agêntico (pending → running, accepted → success, declined → failed).
+- Nó agêntico em approval=pending mostra inline botões "Declinar" e "Aprovar" (success/failure tinted) com `stopPropagation` pra não conflitar com o click do nó. Quando resolvido, mostra badge "aprovado"/"declinado".
+- Click no nó abre `BottomSheet`. Pra step agêntico, o sheet rende `AgenticPrDiff` em vez das 4 colunas padrão: card de PR (título, autor, summary, botões Aprovar/Declinar no header), navegador de arquivos à esquerda com contagem `+/−` por arquivo, e diff unified-like à direita (hunks com header, linhas tonadas verde/vermelho com prefix `+`/`−`).
+- PR mock tem 4 arquivos com diffs realistas: `pom.xml` (`<java.version>1.8</java.version>` → `21`, plugin com `<release>21</release>` + `--enable-preview`), `Dockerfile` (`openjdk:8-jre-slim` → `itau-jdk-21:lts`), `PaymentService.java` (switch tradicional → switch expression + `var`), `PaymentDto.java` (POJO → `record`).
+
+**Decisão sobre React Flow**: usuário pediu "stepper do React Flow". Não instalei a lib `@xyflow/react` — o screen já tem um stepper SVG custom de 1042 linhas e refatorar pra React Flow seria um lift desproporcional pro wireframe. Mantive o visual atual (nodes posicionados + edges Bezier SVG) que já mimetiza React Flow visualmente, e adicionei o nó agêntico no mesmo paradigma. Se for promovido pra produção, vale considerar a lib pra ganhar pan/zoom/minimap nativo (hoje são mock).
+
+**Decisão sobre `agentic` em `OnboardingStep`**: a metadata da PR (título, autor, summary, files, hunks) fica no campo `agentic?` da step em `database.ts`. Tipada como `AgenticPropositionMetadata` exportada — `WorkflowTrackerDetail` importa pra renderizar o diff. Mantém data centralizada e permite ampliar pra outros tipos de proposição agêntica futuramente (não-PR).

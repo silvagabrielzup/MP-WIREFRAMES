@@ -37,6 +37,32 @@ export type OnboardingStep = {
    * instância resultante aparece no Workflow Tracker como execução ligada.
    */
   triggers?: WorkflowAsset
+  /**
+   * Passo agêntico — agente propõe uma alteração que precisa de aprovação
+   * humana explícita (Accept/Decline) antes de continuar o fluxo.
+   */
+  agentic?: AgenticPropositionMetadata
+}
+
+export type AgenticPropositionMetadata = {
+  kind: 'pr'
+  prTitle: string
+  prAuthor: string
+  prSummary: string
+  /** Conjunto de arquivos modificados; cada um expõe um diff unified-like. */
+  files: AgenticPropositionFile[]
+}
+
+export type AgenticPropositionFile = {
+  path: string
+  language: string
+  /** Bloco de diff renderizado linha-a-linha. */
+  hunks: AgenticPropositionHunk[]
+}
+
+export type AgenticPropositionHunk = {
+  header: string
+  lines: { kind: 'context' | 'add' | 'del'; text: string }[]
 }
 
 export type WorkflowInput = {
@@ -178,11 +204,126 @@ export const migrationExecutionWorkflow: WorkflowAsset = {
       ctaLabel: 'Marcar build',
     },
     {
+      id: 'agentic-java-21-upgrade',
+      title: 'Atualizar runtime Java 8 → 21 (agêntico)',
+      description:
+        'Agente analisou o pom.xml e o Dockerfile, propôs PR migrando o runtime pra Java 21 LTS. Aprovação humana é obrigatória antes do deploy.',
+      required: true,
+      dependsOn: ['verb-build'],
+      completedOnClick: false,
+      ctaLabel: 'Revisar PR',
+      agentic: {
+        kind: 'pr',
+        prTitle: 'chore(runtime): upgrade Java 8 → 21 LTS',
+        prAuthor: 'agent · konstructor-java-bot',
+        prSummary:
+          'Substitui o runtime Java 8 (EOL) pelo OpenJDK 21 LTS via imagem base `itau-jdk-21:lts`. Atualiza pom.xml, Dockerfile e ajusta APIs deprecadas — adota records, switch expressions e var onde idiomático. Mantém compatibilidade binária com clients Spring 5.x via shim de bytecode.',
+        files: [
+          {
+            path: 'pom.xml',
+            language: 'xml',
+            hunks: [
+              {
+                header: '@@ -17,7 +17,7 @@ <properties>',
+                lines: [
+                  { kind: 'context', text: '  <properties>' },
+                  { kind: 'del', text: '    <java.version>1.8</java.version>' },
+                  { kind: 'add', text: '    <java.version>21</java.version>' },
+                  { kind: 'context', text: '    <spring-boot.version>3.2.5</spring-boot.version>' },
+                  { kind: 'context', text: '  </properties>' },
+                ],
+              },
+              {
+                header: '@@ -42,9 +42,12 @@ <build>',
+                lines: [
+                  { kind: 'context', text: '      <plugin>' },
+                  { kind: 'context', text: '        <artifactId>maven-compiler-plugin</artifactId>' },
+                  { kind: 'del', text: '        <configuration>' },
+                  { kind: 'del', text: '          <source>1.8</source>' },
+                  { kind: 'del', text: '          <target>1.8</target>' },
+                  { kind: 'del', text: '        </configuration>' },
+                  { kind: 'add', text: '        <configuration>' },
+                  { kind: 'add', text: '          <release>21</release>' },
+                  { kind: 'add', text: '          <compilerArgs><arg>--enable-preview</arg></compilerArgs>' },
+                  { kind: 'add', text: '        </configuration>' },
+                  { kind: 'context', text: '      </plugin>' },
+                ],
+              },
+            ],
+          },
+          {
+            path: 'Dockerfile',
+            language: 'dockerfile',
+            hunks: [
+              {
+                header: '@@ -1,6 +1,6 @@',
+                lines: [
+                  { kind: 'del', text: 'FROM openjdk:8-jre-slim' },
+                  { kind: 'add', text: 'FROM artifactory-itau.local/itau-jdk-21:lts' },
+                  { kind: 'context', text: '' },
+                  { kind: 'context', text: 'WORKDIR /app' },
+                  { kind: 'context', text: 'COPY target/pix-core-*.jar app.jar' },
+                  { kind: 'del', text: 'CMD ["java","-jar","app.jar"]' },
+                  { kind: 'add', text: 'CMD ["java","--enable-preview","-jar","app.jar"]' },
+                ],
+              },
+            ],
+          },
+          {
+            path: 'src/main/java/com/itau/pix/PaymentService.java',
+            language: 'java',
+            hunks: [
+              {
+                header: '@@ -23,12 +23,9 @@ public class PaymentService {',
+                lines: [
+                  { kind: 'context', text: '  public TransactionResult process(Transaction tx) {' },
+                  { kind: 'del', text: '    String status;' },
+                  { kind: 'del', text: '    switch (tx.getType()) {' },
+                  { kind: 'del', text: '      case PIX: status = "ok"; break;' },
+                  { kind: 'del', text: '      case TED: status = "ok"; break;' },
+                  { kind: 'del', text: '      default:  status = "unsupported";' },
+                  { kind: 'del', text: '    }' },
+                  { kind: 'add', text: '    var status = switch (tx.getType()) {' },
+                  { kind: 'add', text: '      case PIX, TED -> "ok";' },
+                  { kind: 'add', text: '      default -> "unsupported";' },
+                  { kind: 'add', text: '    };' },
+                  { kind: 'context', text: '    return new TransactionResult(tx.getId(), status);' },
+                  { kind: 'context', text: '  }' },
+                ],
+              },
+            ],
+          },
+          {
+            path: 'src/main/java/com/itau/pix/dto/PaymentDto.java',
+            language: 'java',
+            hunks: [
+              {
+                header: '@@ -1,15 +1,3 @@',
+                lines: [
+                  { kind: 'del', text: 'public class PaymentDto {' },
+                  { kind: 'del', text: '  private final String id;' },
+                  { kind: 'del', text: '  private final BigDecimal amount;' },
+                  { kind: 'del', text: '  public PaymentDto(String id, BigDecimal amount) {' },
+                  { kind: 'del', text: '    this.id = id;' },
+                  { kind: 'del', text: '    this.amount = amount;' },
+                  { kind: 'del', text: '  }' },
+                  { kind: 'del', text: '  public String getId() { return id; }' },
+                  { kind: 'del', text: '  public BigDecimal getAmount() { return amount; }' },
+                  { kind: 'del', text: '}' },
+                  { kind: 'add', text: 'public record PaymentDto(String id, BigDecimal amount) {}' },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
       id: 'verb-deploy',
       title: 'deploy · Kaptain',
       description: 'Provisiona infra em dev via CloudFormation e sobe o app em ECS Fargate.',
       required: true,
-      dependsOn: ['verb-build'],
+      dependsOn: ['agentic-java-21-upgrade'],
       completedOnClick: true,
       ctaLabel: 'Marcar deploy',
     },

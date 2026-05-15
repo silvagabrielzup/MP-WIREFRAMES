@@ -23,6 +23,13 @@ import {
   Plus,
   Minus,
   ArrowRightLeft,
+  Activity,
+  Lock,
+  Server,
+  Code2,
+  Database,
+  Settings as SettingsIcon,
+  Wrench,
 } from 'lucide-react'
 import { useWorkflows } from '../contexts/WorkflowsProvider'
 import { executionTemplateIds, workflows as workflowTemplates } from '../data/database'
@@ -46,13 +53,6 @@ const pendingApprovals: {
   requester: { initials: string; color: string }
   ago: string
   blocking: boolean
-}[] = []
-
-const appHubAlerts: {
-  kind: 'approval' | 'failure' | 'policy'
-  title: string
-  detail: string
-  ago: string
 }[] = []
 
 function EmptyState({
@@ -168,17 +168,71 @@ function OnboardingStepRow({
   )
 }
 
-const MOCK_REPO = {
-  url: 'git@itau.gitlab.com:apps/pix-core.git',
-  name: 'pix-core',
+type RepoKind = 'code' | 'ci-cd' | 'infra' | 'db' | 'config'
+
+const REPO_KIND_META: Record<
+  RepoKind,
+  { label: string; tone: string }
+> = {
+  'code': { label: 'código', tone: 'border-info/30 bg-info/10 text-info' },
+  'ci-cd': { label: 'ci/cd', tone: 'border-accent/30 bg-accent/10 text-accent' },
+  'infra': { label: 'infra', tone: 'border-warning/30 bg-warning/10 text-warning' },
+  'db': { label: 'banco', tone: 'border-success/30 bg-success/10 text-success' },
+  'config': { label: 'config', tone: 'border-border bg-bg text-text-secondary' },
+}
+
+type ServiceRepo = {
+  name: string
+  kind: RepoKind
+  stack: string
+  size: string
+  lastCommit: string
+}
+
+const MOCK_SERVICE = {
+  sa: 'ssa-pix-core',
+  name: 'Pix Core',
+  description:
+    'Serviço de pagamentos instantâneos Pix — gestão de chaves, transações, idempotência e webhooks.',
+  squad: 'squad-pix',
   org: 'itau-applications',
-  defaultBranch: 'main',
-  language: 'Java 17 · Spring Boot 3.2',
-  contributors: 14,
-  lastCommit: 'há 2h · feat(payment): retry com backoff exponencial',
-  size: '184 MB',
-  filesCount: '2.418 arquivos',
-  lastTag: 'v3.14.2',
+  repos: [
+    {
+      name: 'pix-core',
+      kind: 'code' as RepoKind,
+      stack: 'Java 17 · Spring Boot 3.2',
+      size: '184 MB · 2.418 arquivos',
+      lastCommit: 'há 2h · feat(payment): retry com backoff exponencial',
+    },
+    {
+      name: 'pix-core-pipeline',
+      kind: 'ci-cd' as RepoKind,
+      stack: 'Groovy · Jenkins shared lib',
+      size: '4.2 MB · 38 arquivos',
+      lastCommit: 'há 1d · chore: bump jenkins-shared-library v4.2',
+    },
+    {
+      name: 'pix-core-infra',
+      kind: 'infra' as RepoKind,
+      stack: 'Terraform 1.5 · AWS modules',
+      size: '18 MB · 142 arquivos',
+      lastCommit: 'há 3d · feat(network): private endpoint pra Aurora',
+    },
+    {
+      name: 'pix-core-db',
+      kind: 'db' as RepoKind,
+      stack: 'Liquibase · SQL Aurora',
+      size: '2.8 MB · 96 arquivos',
+      lastCommit: 'há 5d · feat: índice composto em transacao_idem',
+    },
+    {
+      name: 'pix-core-config',
+      kind: 'config' as RepoKind,
+      stack: 'YAML · K8s manifests',
+      size: '780 KB · 24 arquivos',
+      lastCommit: 'há 6h · chore: refresh config map pra hml',
+    },
+  ] satisfies ServiceRepo[],
 }
 
 type TreeAction = 'moved' | 'added' | 'removed'
@@ -190,65 +244,133 @@ type TreeNode = {
   children?: TreeNode[]
 }
 
-const CURRENT_TREE: TreeNode = {
-  name: 'pix-core',
-  type: 'dir',
-  defaultOpen: true,
-  children: [
-    {
-      name: 'src',
-      type: 'dir',
-      defaultOpen: true,
-      children: [
-        {
-          name: 'main',
-          type: 'dir',
-          defaultOpen: true,
-          children: [
-            {
-              name: 'java',
-              type: 'dir',
-              children: [
-                {
-                  name: 'com.itau.pix',
-                  type: 'dir',
-                  children: [
-                    { name: 'Application.java', type: 'file' },
-                    { name: 'PaymentService.java', type: 'file' },
-                    { name: 'PixController.java', type: 'file' },
-                  ],
-                },
-              ],
-            },
-            {
-              name: 'resources',
-              type: 'dir',
-              children: [
-                { name: 'application.yaml', type: 'file' },
-                { name: 'logback.xml', type: 'file' },
-              ],
-            },
-          ],
-        },
-        { name: 'test', type: 'dir', children: [{ name: 'java', type: 'dir' }] },
-      ],
-    },
-    {
-      name: 'helm',
-      type: 'dir',
-      children: [
-        { name: 'values.yaml', type: 'file' },
-        { name: 'Chart.yaml', type: 'file' },
-      ],
-    },
-    { name: 'pom.xml', type: 'file' },
-    { name: 'Dockerfile', type: 'file' },
-    { name: 'README.md', type: 'file' },
-    { name: '.gitlab-ci.yml', type: 'file', action: 'removed' },
-  ],
-}
+const BEFORE_TREES: TreeNode[] = [
+  {
+    name: 'pix-core',
+    type: 'dir',
+    defaultOpen: true,
+    children: [
+      {
+        name: 'src',
+        type: 'dir',
+        defaultOpen: true,
+        children: [
+          {
+            name: 'main',
+            type: 'dir',
+            children: [
+              {
+                name: 'java',
+                type: 'dir',
+                children: [
+                  {
+                    name: 'com.itau.pix',
+                    type: 'dir',
+                    children: [
+                      { name: 'Application.java', type: 'file' },
+                      { name: 'PaymentService.java', type: 'file' },
+                      { name: 'PixController.java', type: 'file' },
+                    ],
+                  },
+                ],
+              },
+              {
+                name: 'resources',
+                type: 'dir',
+                children: [
+                  { name: 'application.yaml', type: 'file' },
+                  { name: 'logback.xml', type: 'file' },
+                ],
+              },
+            ],
+          },
+          { name: 'test', type: 'dir', children: [{ name: 'java', type: 'dir' }] },
+        ],
+      },
+      { name: 'pom.xml', type: 'file' },
+      { name: 'Dockerfile', type: 'file' },
+      { name: 'README.md', type: 'file' },
+    ],
+  },
+  {
+    name: 'pix-core-pipeline',
+    type: 'dir',
+    defaultOpen: true,
+    children: [
+      { name: 'Jenkinsfile', type: 'file' },
+      {
+        name: 'shared',
+        type: 'dir',
+        children: [
+          { name: 'build.groovy', type: 'file' },
+          { name: 'deploy.groovy', type: 'file' },
+          { name: 'rollback.groovy', type: 'file' },
+        ],
+      },
+      { name: 'README.md', type: 'file' },
+    ],
+  },
+  {
+    name: 'pix-core-infra',
+    type: 'dir',
+    children: [
+      {
+        name: 'modules',
+        type: 'dir',
+        children: [
+          { name: 'eks', type: 'dir' },
+          { name: 'aurora', type: 'dir' },
+          { name: 'msk', type: 'dir' },
+        ],
+      },
+      {
+        name: 'envs',
+        type: 'dir',
+        children: [
+          { name: 'dev', type: 'dir' },
+          { name: 'hml', type: 'dir' },
+          { name: 'prod', type: 'dir' },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'pix-core-db',
+    type: 'dir',
+    children: [
+      {
+        name: 'changelog',
+        type: 'dir',
+        children: [{ name: 'db.changelog-master.xml', type: 'file' }],
+      },
+      {
+        name: 'migrations',
+        type: 'dir',
+        children: [
+          { name: '001-create-transacao.sql', type: 'file' },
+          { name: '002-add-idem-key.sql', type: 'file' },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'pix-core-config',
+    type: 'dir',
+    children: [
+      {
+        name: 'k8s',
+        type: 'dir',
+        children: [
+          { name: 'dev.yaml', type: 'file' },
+          { name: 'hml.yaml', type: 'file' },
+          { name: 'prod.yaml', type: 'file' },
+        ],
+      },
+    ],
+  },
+]
 
-const MONOREPO_TREE: TreeNode = {
+const AFTER_TREE: TreeNode = {
   name: 'vanilla-monorepo',
   type: 'dir',
   defaultOpen: true,
@@ -267,13 +389,11 @@ const MONOREPO_TREE: TreeNode = {
             {
               name: 'src',
               type: 'dir',
-              defaultOpen: true,
               action: 'moved',
               children: [
                 {
                   name: 'main',
                   type: 'dir',
-                  action: 'moved',
                   children: [
                     {
                       name: 'java',
@@ -300,23 +420,84 @@ const MONOREPO_TREE: TreeNode = {
                     },
                   ],
                 },
-                { name: 'test', type: 'dir', action: 'moved', children: [{ name: 'java', type: 'dir' }] },
-              ],
-            },
-            {
-              name: 'helm',
-              type: 'dir',
-              action: 'moved',
-              children: [
-                { name: 'values.yaml', type: 'file' },
-                { name: 'Chart.yaml', type: 'file' },
+                { name: 'test', type: 'dir', children: [{ name: 'java', type: 'dir' }] },
               ],
             },
             { name: 'pom.xml', type: 'file', action: 'moved' },
             { name: 'Dockerfile', type: 'file', action: 'moved' },
-            { name: 'README.md', type: 'file', action: 'moved' },
+            {
+              name: 'ci',
+              type: 'dir',
+              action: 'moved',
+              children: [
+                { name: 'kaptain.yaml', type: 'file', action: 'added' },
+                {
+                  name: 'steps',
+                  type: 'dir',
+                  children: [
+                    { name: 'build.groovy', type: 'file' },
+                    { name: 'deploy.groovy', type: 'file' },
+                    { name: 'rollback.groovy', type: 'file' },
+                  ],
+                },
+              ],
+            },
+            {
+              name: 'infra',
+              type: 'dir',
+              action: 'moved',
+              children: [
+                {
+                  name: 'modules',
+                  type: 'dir',
+                  children: [
+                    { name: 'eks', type: 'dir' },
+                    { name: 'aurora', type: 'dir' },
+                    { name: 'msk', type: 'dir' },
+                  ],
+                },
+                {
+                  name: 'envs',
+                  type: 'dir',
+                  children: [
+                    { name: 'dev', type: 'dir' },
+                    { name: 'hml', type: 'dir' },
+                    { name: 'prod', type: 'dir' },
+                  ],
+                },
+              ],
+            },
+            {
+              name: 'db',
+              type: 'dir',
+              action: 'moved',
+              children: [
+                {
+                  name: 'changelog',
+                  type: 'dir',
+                  children: [{ name: 'db.changelog-master.xml', type: 'file' }],
+                },
+                {
+                  name: 'migrations',
+                  type: 'dir',
+                  children: [
+                    { name: '001-create-transacao.sql', type: 'file' },
+                    { name: '002-add-idem-key.sql', type: 'file' },
+                  ],
+                },
+              ],
+            },
+            {
+              name: 'config',
+              type: 'dir',
+              action: 'moved',
+              children: [
+                { name: 'dev.yaml', type: 'file' },
+                { name: 'hml.yaml', type: 'file' },
+                { name: 'prod.yaml', type: 'file' },
+              ],
+            },
             { name: 'komply.yaml', type: 'file', action: 'added' },
-            { name: 'kaptain.yaml', type: 'file', action: 'added' },
             { name: 'orkestra.yaml', type: 'file', action: 'added' },
           ],
         },
@@ -331,6 +512,64 @@ const MONOREPO_TREE: TreeNode = {
     },
   ],
 }
+
+type TechDebtItem = {
+  icon: 'GitBranch' | 'Lock' | 'AlertTriangle' | 'Server' | 'Activity' | 'ShieldCheck'
+  title: string
+  impact: string
+  resolution: string
+}
+
+const TECH_DEBT: TechDebtItem[] = [
+  {
+    icon: 'GitBranch',
+    title: 'Pipeline Jenkins free-form',
+    impact:
+      'Pipeline declarado via DSL Groovy livre, sem audit trail estruturado; difícil de versionar e replicar entre SAs.',
+    resolution:
+      'Substituído por Kaptain declarativo em YAML, com snapshot de cada execução e SLO observado.',
+  },
+  {
+    icon: 'Lock',
+    title: 'Secrets versionados em repo de config',
+    impact:
+      'Strings base64 de credenciais HML/PROD commitadas em k8s/*.yaml — viola Komply data-classification.',
+    resolution:
+      'Migrado pra Vault-backed via SecretProviderClass; Komply bloqueia commits com `kind: Secret` literal.',
+  },
+  {
+    icon: 'AlertTriangle',
+    title: 'Auto-rollback ausente em deploy',
+    impact:
+      'Rollback de prod só manual via approval Jenkins. MTTR médio 23min nos últimos 90d.',
+    resolution:
+      'Traffik observa p99/erro contra SLO; rollback automático se janela de 5min viola threshold.',
+  },
+  {
+    icon: 'Server',
+    title: 'Imagens base sem scan de CVE',
+    impact:
+      'Dockerfile usa `openjdk:8` plano; última build trouxe 14 CVEs HIGH não tratadas.',
+    resolution:
+      'Komply força imagem base aprovada (`itau-jdk-21:lts`) + scan obrigatório no Konstructor.',
+  },
+  {
+    icon: 'Activity',
+    title: 'Sem dashboards padronizados',
+    impact:
+      'Cada SA monta seu Datadog dashboard; comparar saúde entre apps é impossível.',
+    resolution:
+      'Orkestra injeta dashboards padrão (p99, erro %, saturação CPU/mem) na primeira subida.',
+  },
+  {
+    icon: 'ShieldCheck',
+    title: 'Versionamento de schema manual',
+    impact:
+      'Equipe roda `psql` em prod via bastion; auditoria precária e drift HML/PROD.',
+    resolution:
+      'Liquibase no motor de Migration; cada PR de DB gera changeset versionado aplicado via dual-write.',
+  },
+]
 
 const ACTION_LABEL: Record<TreeAction, string> = {
   moved: 'mov',
@@ -416,6 +655,31 @@ function TreeNodeView({ node, depth = 0 }: { node: TreeNode; depth?: number }) {
   )
 }
 
+type ModalStep = 1 | 2 | 3
+
+const STEP_LABELS: Record<ModalStep, string> = {
+  1: 'Buscar Serviço',
+  2: 'Estrutura mono-repo',
+  3: 'Débitos técnicos resolvidos',
+}
+
+const TECH_DEBT_ICONS = {
+  GitBranch,
+  Lock,
+  AlertTriangle,
+  Server,
+  Activity,
+  ShieldCheck,
+} as const
+
+const REPO_KIND_ICONS: Record<RepoKind, typeof Code2> = {
+  'code': Code2,
+  'ci-cd': Wrench,
+  'infra': Server,
+  'db': Database,
+  'config': SettingsIcon,
+}
+
 function RepoPickerModal({
   open,
   onClose,
@@ -425,8 +689,8 @@ function RepoPickerModal({
   onClose: () => void
   onConfirm: () => void
 }) {
-  const [step, setStep] = useState<1 | 2>(1)
-  const [repoUrl, setRepoUrl] = useState(MOCK_REPO.url)
+  const [step, setStep] = useState<ModalStep>(1)
+  const [serviceQuery, setServiceQuery] = useState(MOCK_SERVICE.sa)
   const [searched, setSearched] = useState(false)
 
   if (!open) return null
@@ -434,7 +698,7 @@ function RepoPickerModal({
   const reset = () => {
     setStep(1)
     setSearched(false)
-    setRepoUrl(MOCK_REPO.url)
+    setServiceQuery(MOCK_SERVICE.sa)
   }
   const handleClose = () => {
     reset()
@@ -464,26 +728,21 @@ function RepoPickerModal({
                 Selecionar repositório pra migração
               </h2>
             </div>
-            <div className="mt-2 flex items-center gap-2 text-[11px]">
-              <span
-                className={`flex h-5 items-center gap-1.5 rounded-full border px-2 ${
-                  step === 1
-                    ? 'border-accent/40 bg-accent/10 text-accent'
-                    : 'border-border bg-bg text-text-muted'
-                }`}
-              >
-                <span className="font-mono">1</span> Buscar repo
-              </span>
-              <ArrowRight className="h-3 w-3 text-text-muted" />
-              <span
-                className={`flex h-5 items-center gap-1.5 rounded-full border px-2 ${
-                  step === 2
-                    ? 'border-accent/40 bg-accent/10 text-accent'
-                    : 'border-border bg-bg text-text-muted'
-                }`}
-              >
-                <span className="font-mono">2</span> Estrutura mono-repo
-              </span>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+              {([1, 2, 3] as ModalStep[]).map((n, i) => (
+                <span key={n} className="flex items-center gap-2">
+                  {i > 0 && <ArrowRight className="h-3 w-3 text-text-muted" />}
+                  <span
+                    className={`flex h-5 items-center gap-1.5 rounded-full border px-2 ${
+                      step === n
+                        ? 'border-accent/40 bg-accent/10 text-accent'
+                        : 'border-border bg-bg text-text-muted'
+                    }`}
+                  >
+                    <span className="font-mono">{n}</span> {STEP_LABELS[n]}
+                  </span>
+                </span>
+              ))}
             </div>
           </div>
           <button
@@ -496,34 +755,35 @@ function RepoPickerModal({
           </button>
         </header>
 
-        {step === 1 ? (
+        {step === 1 && (
           <section className="space-y-4 px-5 py-5">
             <div>
               <label className="block text-[12px] font-medium text-text-secondary">
-                URL do repositório
+                Busca por Serviço de Aplicação
               </label>
               <p className="mt-0.5 text-[11.5px] text-text-muted">
-                Cole o link do repositório (GitLab ou GitHub Itaú) que será migrado pra estrutura
-                mono-repo Vanilla.
+                Informe a SA do serviço. A arquitetura do mono-repo Vanilla traz junto todos os
+                repositórios da família (código, ci/cd, infra, db, config) — todos vão ser
+                migrados como uma unidade.
               </p>
               <div className="mt-2 flex items-center gap-2">
                 <div className="flex flex-1 items-center gap-2 rounded-md border border-border bg-bg px-3 py-2 focus-within:border-accent">
-                  <GitBranch className="h-3.5 w-3.5 flex-none text-text-muted" />
+                  <Search className="h-3.5 w-3.5 flex-none text-text-muted" />
                   <input
                     type="text"
-                    value={repoUrl}
+                    value={serviceQuery}
                     onChange={(e) => {
-                      setRepoUrl(e.target.value)
+                      setServiceQuery(e.target.value)
                       setSearched(false)
                     }}
-                    placeholder="git@itau.gitlab.com:apps/<repo>.git"
+                    placeholder="ssa-<servico>"
                     className="flex-1 bg-transparent font-mono text-[12px] text-text-primary placeholder:text-text-muted focus:outline-none"
                   />
                 </div>
                 <button
                   type="button"
                   onClick={() => setSearched(true)}
-                  disabled={!repoUrl.trim()}
+                  disabled={!serviceQuery.trim()}
                   className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent px-3 text-[12px] font-medium text-black transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Search className="h-3.5 w-3.5" />
@@ -533,84 +793,116 @@ function RepoPickerModal({
             </div>
 
             {searched && (
-              <div className="rounded-md border border-border bg-bg px-4 py-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-md bg-success/15 text-success">
-                      <CheckCircle2 className="h-4 w-4" />
-                    </span>
-                    <div>
-                      <div className="font-mono text-[12.5px] text-text-primary">
-                        {MOCK_REPO.org}/{MOCK_REPO.name}
-                      </div>
-                      <div className="text-[11px] text-text-muted">
-                        repositório encontrado · default branch {MOCK_REPO.defaultBranch}
+              <div className="space-y-3">
+                <div className="rounded-md border border-border bg-bg px-4 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-2">
+                      <span className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-md bg-success/15 text-success">
+                        <CheckCircle2 className="h-4 w-4" />
+                      </span>
+                      <div>
+                        <div className="font-mono text-[12.5px] text-text-primary">
+                          {MOCK_SERVICE.org}/{MOCK_SERVICE.sa}
+                        </div>
+                        <div className="text-[11px] text-text-muted">{MOCK_SERVICE.name} · {MOCK_SERVICE.squad}</div>
                       </div>
                     </div>
+                    <span className="flex-none rounded border border-success/30 bg-success/10 px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wider text-success">
+                      {MOCK_SERVICE.repos.length} repos
+                    </span>
                   </div>
-                  <span className="rounded border border-success/30 bg-success/10 px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wider text-success">
-                    pronto
-                  </span>
+                  <div className="mt-2 text-[11.5px] text-text-secondary">
+                    {MOCK_SERVICE.description}
+                  </div>
                 </div>
-                <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[11.5px]">
-                  <div>
-                    <dt className="text-text-muted">Linguagem</dt>
-                    <dd className="text-text-primary">{MOCK_REPO.language}</dd>
+
+                <div className="space-y-1.5">
+                  <div className="px-1 text-[10.5px] uppercase tracking-wider text-text-muted">
+                    Repositórios da família ({MOCK_SERVICE.repos.length})
                   </div>
-                  <div>
-                    <dt className="text-text-muted">Contribuidores</dt>
-                    <dd className="font-mono text-text-primary">{MOCK_REPO.contributors}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-text-muted">Tamanho</dt>
-                    <dd className="font-mono text-text-primary">
-                      {MOCK_REPO.size} · {MOCK_REPO.filesCount}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-text-muted">Última tag</dt>
-                    <dd className="font-mono text-text-primary">{MOCK_REPO.lastTag}</dd>
-                  </div>
-                  <div className="col-span-2">
-                    <dt className="text-text-muted">Último commit</dt>
-                    <dd className="font-mono text-text-primary">{MOCK_REPO.lastCommit}</dd>
-                  </div>
-                </dl>
+                  {MOCK_SERVICE.repos.map((r) => {
+                    const KindIcon = REPO_KIND_ICONS[r.kind]
+                    const kind = REPO_KIND_META[r.kind]
+                    return (
+                      <div
+                        key={r.name}
+                        className="flex items-center gap-3 rounded-md border border-border bg-bg px-3 py-2"
+                      >
+                        <span className="flex h-7 w-7 flex-none items-center justify-center rounded-md border border-border bg-surface">
+                          <KindIcon className="h-3.5 w-3.5 text-text-secondary" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="truncate font-mono text-[12px] text-text-primary">
+                              {r.name}
+                            </span>
+                            <span
+                              className={`flex-none rounded-full border px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider ${kind.tone}`}
+                            >
+                              {kind.label}
+                            </span>
+                          </div>
+                          <div className="mt-0.5 truncate text-[11px] text-text-muted">
+                            {r.stack} · {r.size}
+                          </div>
+                        </div>
+                        <span className="hidden flex-none font-mono text-[10.5px] text-text-muted sm:block">
+                          {r.lastCommit}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             )}
           </section>
-        ) : (
+        )}
+
+        {step === 2 && (
           <section className="space-y-3 px-5 py-5">
             <div className="text-[12px] text-text-secondary">
-              Os arquivos abaixo vão ser movidos pra dentro de{' '}
+              Cada repositório da família vira uma pasta dentro de{' '}
               <code className="rounded bg-bg px-1.5 py-0.5 font-mono text-[11px] text-accent">
                 apps/ssa-pix-core/
               </code>{' '}
-              e a tooling Vanilla (Komply, Kaptain, Orkestra) será injetada no caminho do app.
+              — código no root, e <code className="font-mono text-[11px] text-accent">ci/</code>,{' '}
+              <code className="font-mono text-[11px] text-accent">infra/</code>,{' '}
+              <code className="font-mono text-[11px] text-accent">db/</code> e{' '}
+              <code className="font-mono text-[11px] text-accent">config/</code> como sub-pastas.
+              A tooling Vanilla (Komply, Kaptain, Orkestra) é injetada no caminho do app.
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-md border border-border bg-bg p-3">
                 <div className="mb-2 flex items-center justify-between">
                   <h4 className="text-[12px] font-semibold tracking-tight text-text-primary">
-                    Antes
+                    Antes · multi-repo
                   </h4>
-                  <span className="font-mono text-[10.5px] text-text-muted">repo standalone</span>
+                  <span className="font-mono text-[10.5px] text-text-muted">
+                    {BEFORE_TREES.length} repos
+                  </span>
                 </div>
-                <div className="max-h-[340px] space-y-0.5 overflow-y-auto pr-1">
-                  <TreeNodeView node={CURRENT_TREE} />
+                <div className="max-h-[400px] space-y-2 overflow-y-auto pr-1">
+                  {BEFORE_TREES.map((tree) => (
+                    <div
+                      key={tree.name}
+                      className="rounded border border-border/60 bg-surface/40 p-2"
+                    >
+                      <div className="space-y-0.5">
+                        <TreeNodeView node={tree} />
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
               <div className="rounded-md border border-accent/30 bg-accent/[0.04] p-3">
                 <div className="mb-2 flex items-center justify-between">
                   <h4 className="text-[12px] font-semibold tracking-tight text-text-primary">
-                    Depois
+                    Depois · mono-repo Vanilla
                   </h4>
-                  <span className="font-mono text-[10.5px] text-text-muted">
-                    mono-repo Vanilla
-                  </span>
+                  <span className="font-mono text-[10.5px] text-text-muted">unificado</span>
                 </div>
-                <div className="max-h-[340px] space-y-0.5 overflow-y-auto pr-1">
-                  <TreeNodeView node={MONOREPO_TREE} />
+                <div className="max-h-[400px] space-y-0.5 overflow-y-auto pr-1">
+                  <TreeNodeView node={AFTER_TREE} />
                 </div>
               </div>
             </div>
@@ -628,6 +920,53 @@ function RepoPickerModal({
           </section>
         )}
 
+        {step === 3 && (
+          <section className="space-y-3 px-5 py-5">
+            <div className="text-[12px] text-text-secondary">
+              A migração resolve débitos técnicos acumulados nos repositórios da família —
+              especialmente em infra, observabilidade e segurança. Cada item abaixo é fechado
+              automaticamente pelo template Vanilla.
+            </div>
+            <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
+              {TECH_DEBT.map((d) => {
+                const Icon = TECH_DEBT_ICONS[d.icon]
+                return (
+                  <div
+                    key={d.title}
+                    className="rounded-md border border-border bg-bg p-3"
+                  >
+                    <div className="flex items-start gap-3">
+                      <span className="mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-md bg-warning/15 text-warning">
+                        <Icon className="h-3.5 w-3.5" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <h5 className="text-[12.5px] font-semibold text-text-primary">
+                            {d.title}
+                          </h5>
+                          <span className="flex-none rounded-full border border-failure/30 bg-failure/10 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-failure">
+                            débito
+                          </span>
+                        </div>
+                        <div className="mt-1 text-[11.5px] text-text-secondary">
+                          <span className="text-text-muted">Hoje:</span> {d.impact}
+                        </div>
+                        <div className="mt-1 text-[11.5px] text-success">
+                          <span className="text-text-muted">Pós-migração:</span> {d.resolution}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="rounded-md border border-success/30 bg-success/[0.06] px-3 py-2 text-[11.5px] text-success">
+              {TECH_DEBT.length} débitos técnicos serão resolvidos automaticamente ao confirmar
+              a migração.
+            </div>
+          </section>
+        )}
+
         <footer className="flex items-center justify-between border-t border-border bg-bg/50 px-5 py-3">
           <button
             type="button"
@@ -637,20 +976,20 @@ function RepoPickerModal({
             Cancelar
           </button>
           <div className="flex items-center gap-2">
-            {step === 2 && (
+            {step > 1 && (
               <button
                 type="button"
-                onClick={() => setStep(1)}
+                onClick={() => setStep((s) => (s === 3 ? 2 : 1))}
                 className="inline-flex h-9 items-center rounded-md border border-border bg-bg px-3 text-[12px] text-text-secondary hover:border-border-strong hover:text-text-primary"
               >
                 Voltar
               </button>
             )}
-            {step === 1 ? (
+            {step < 3 ? (
               <button
                 type="button"
-                onClick={() => setStep(2)}
-                disabled={!searched}
+                onClick={() => setStep((s) => (s === 1 ? 2 : 3))}
+                disabled={step === 1 && !searched}
                 className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent px-3 text-[12px] font-medium text-black transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Próximo
@@ -769,7 +1108,7 @@ function OnboardingCard({
 
 export default function Home() {
   const navigate = useNavigate()
-  const { workflows: instances, advanceStep, addWorkflow } = useWorkflows()
+  const { workflows: instances, advanceStep, addWorkflow, appHubAlerts } = useWorkflows()
   const primaryInstance = [...instances]
     .reverse()
     .find((inst) => !executionTemplateIds.has(inst.templateId))
@@ -938,7 +1277,7 @@ export default function Home() {
               />
             ) : (
               <ul>
-                {appHubAlerts.map((a, i) => {
+                {appHubAlerts.map((a) => {
                   const Icon =
                     a.kind === 'approval' ? Clock3 : a.kind === 'failure' ? AlertTriangle : ShieldCheck
                   const color =
@@ -949,7 +1288,7 @@ export default function Home() {
                       : 'text-info bg-info/15'
                   return (
                     <li
-                      key={i}
+                      key={a.id}
                       className="group flex cursor-pointer items-center gap-3 border-b border-border px-4 py-2.5 last:border-b-0 hover:bg-[#181A1F]"
                     >
                       <span className={`flex h-7 w-7 flex-none items-center justify-center rounded-md ${color}`}>
