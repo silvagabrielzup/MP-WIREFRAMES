@@ -159,7 +159,7 @@ export default function ApplicationHub() {
               <table className="w-full text-[12.5px]">
                 <thead>
                   <tr className="border-b border-border bg-[#101115] text-left text-[11px] uppercase tracking-wider text-text-muted">
-                    <th className="px-4 py-2.5 font-medium">SA</th>
+                    <th className="px-4 py-2.5 font-medium">Aplicação</th>
                     <th className="px-4 py-2.5 font-medium">Squad</th>
                     <th className="px-4 py-2.5 font-medium">Saúde</th>
                     <th className="px-4 py-2.5 font-medium text-right">Uptime</th>
@@ -175,13 +175,16 @@ export default function ApplicationHub() {
                 return (
                   <tr key={a.id} className="group border-b border-border last:border-b-0 hover:bg-[#181A1F]">
                     <td className="px-4 py-2.5">
-                      <Link to={`/application-hub/${a.sa}`} className="flex items-center gap-2">
-                        <span className="font-mono text-text-primary">{a.sa}</span>
-                        {a.onPlat && (
-                          <span className="rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-accent">
-                            on-plat
-                          </span>
-                        )}
+                      <Link to={`/application-hub/${a.sa}`} className="block">
+                        <div className="flex items-center gap-2">
+                          <span className="text-text-primary">{a.name}</span>
+                          {a.onPlat && (
+                            <span className="rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-accent">
+                              on-plat
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-0.5 font-mono text-[10.5px] text-text-muted">{a.sa}</div>
                       </Link>
                     </td>
                     <td className="px-4 py-2.5 text-text-secondary">{a.squad}</td>

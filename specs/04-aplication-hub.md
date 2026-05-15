@@ -46,3 +46,53 @@ Esse painel é o ponto de entrada para a ambição de "substituir os control pla
 - Densidade alta — listas e tabelas com 10–25 linhas de dados realistas.
 - Portuguese (pt-BR) para toda copy.
 - Charts inline (sparklines, donuts) sem libs externas.
+
+## Estado atual — iterações pós-MVP (2026-05-15)
+
+### Fonte de dados
+
+A tela consome `useWorkflows().applicationHubs` (state runtime no `WorkflowsProvider`), **não mais** um array hardcoded. O seed em `database.ts` (`applicationHubs: ApplicationHub[] = []`) é vazio — itens aparecem dinamicamente quando um workflow primário entra/conclui o `finalStep`.
+
+### Tipo `ApplicationHub`
+
+Campos atuais:
+
+- `id` (`ahub-<sa>`) — chave estrangeira em notificações
+- `sa` — SA Itaú, usada como slug
+- `name` — nome amigável derivado da SA (`ssa-pix-core` → "Pix Core")
+- `projectId` — projeto agregador
+- `squad`
+- `onPlat: boolean`
+- `health: 'healthy' | 'warn' | 'fail'`
+- `liveIncident: boolean`
+- `uptime`, `p95Ms`, `errorRate`, `deploys7d`
+
+### Gating de criação
+
+`WorkflowsProvider.advanceStep` cria o hub via `buildHubFromTemplate(template)` em **duas situações**:
+
+1. Workflow primário entrou no step marcado `finalStep: true` (eager) — usuário ainda nem clicou o CTA final, mas a trajetória já é considerada concluída.
+2. Workflow primário atingiu o último step naturalmente.
+
+Guard `!executionTemplateIds.has(template.id)` garante que só primários (não execuções como `migrationExecutionWorkflow` / `hmlPromotionWorkflow`) disparam.
+
+Dedupe por `hub.id` impede entrada duplicada.
+
+### Tabela
+
+- Header: "Aplicação" (substituiu "SA"), Squad, Saúde, Uptime, p95, Erro %, Deploys 7d.
+- Primeira coluna: nome amigável (`hub.name`) na linha de cima + `hub.sa` em mono muted na linha de baixo. Badge "on-plat" quando `hub.onPlat`.
+
+### Empty state
+
+Quando `applicationHubs.length === 0`, render `<section>` com ícone Boxes + título "Nenhuma aplicação on-platform" + texto explicando que hubs aparecem após o onboarding Vanilla concluir. Stat row + tabela só renderizam quando há dados.
+
+### `ApplicationHubNotification` (database.ts)
+
+Tipo adicionado pra modelar notificações que linkam pra um hub existente:
+
+- `id`, `icon` (string lucide-name), `title`, `description`, `cta`, `link`
+- `applicationHubId` (FK pra `ApplicationHub.id`)
+- `projectId`
+
+Seed atual: `notif-hml-provisioned-ssa-pix-core` (HML provisionada, CTA "Ver saúde em HML"). Ainda não renderizado em tela — surfará na Home ou no sino da topbar em iteração futura.

@@ -185,3 +185,46 @@ Comportamento do bottom sheet:
   - 1 step com sensor acionado
   - 1 step em running **ou** 1 step falho
   - 1 edge condicional
+
+## Estado atual — iterações pós-MVP (2026-05-15)
+
+### Implementação visual
+
+Não foi adotada a lib React Flow / xyflow — o canvas atual usa SVG custom + nodes posicionados absolutamente (~1042 linhas). O paradigma visual (nodes + edges Bezier + minimap + phase strip + zoom toolbar) mimetiza React Flow mas tudo é à mão. Decisão registrada em `NOTES.md` (2026-05-15).
+
+### 5º verbo: Agente
+
+Foi adicionado um quinto tipo de step além de Build / Deploy / Migration / Rollout:
+
+- **Agente** (cor `accent`, ícone `Sparkles`) — representa proposições agênticas que **exigem aprovação humana** explícita.
+
+O `Verb` type agora é `'build' | 'agentic' | 'deploy' | 'migration' | 'rollout'`. `verbsOrder` inclui agentic; `verbMeta.agentic` define a tonalidade accent. Phase strip e legenda renderizam o verbo Agente quando presente.
+
+### Node agêntico
+
+O step `step-agentic-java-21` (mock injetado entre Build e Deploy) renderiza diferenciado:
+
+- Cabeçalho do node mostra badge `aprovação` quando `approval === 'pending'`.
+- Quando pending, o body do node mostra dois pseudo-botões (`role="button"` com `stopPropagation`):
+  - **Declinar** (border/bg `failure`)
+  - **Aprovar** (border/bg `success`)
+- Quando resolvido, o node mostra badge "aprovado" ou "declinado" e o status efetivo vira `success` ou `failed`.
+- `ApprovalState = 'pending' | 'accepted' | 'declined'` no state do componente.
+
+### Bottom sheet — variação para nodes agênticos
+
+Quando o node selecionado é agêntico (`step.verb === 'agentic'`), o sheet substitui as 4 colunas (Input/Output/Sensores/Decisão) por um componente dedicado `AgenticPrDiff`:
+
+- **Card de PR no topo**: ícone `GitPullRequest`, título da PR, autor (`agent · konstructor-java-bot`), summary multi-linha e botões Aprovar/Declinar (ou badges Aprovado/Declinado conforme estado).
+- **Navegador de arquivos** à esquerda (grid `[200px_1fr]`): lista os arquivos modificados com ícone `FileText`, path, contagem `+N` / `-N`. Click muda o arquivo visível.
+- **Diff unified** à direita: header com path + linguagem; corpo mostra hunks com header (`@@ -L,N +L,N @@`) e linhas tonadas verde (add) / vermelho (del) / neutro (context) com prefixo `+` / `-` / espaço.
+
+Dados vêm de `migrationExecutionWorkflow.onboardingSteps[].agentic` em `database.ts`. Diff mock cobre 4 arquivos: `pom.xml` (java.version + maven-compiler-plugin), `Dockerfile` (base image + CMD), `PaymentService.java` (switch expression + var), `PaymentDto.java` (POJO → record).
+
+### Sync com o provider
+
+`handleApprove` / `handleDecline` chamam `resolveAgenticItem(wfId, AGENTIC_TEMPLATE_STEP_ID)` no provider — remove a entrada do `pendingAgenticFlow` da instância correspondente, fechando o loop com o card "Fluxos agênticos pendentes aprovação" da Home.
+
+### Edges
+
+Inseridas `step-3 → agentic` e `agentic → step-4` para encaixar o nó agêntico no fluxo. Mantida a coloração por verbo (gradient quando atravessa verbos).

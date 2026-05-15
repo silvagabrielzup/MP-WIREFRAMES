@@ -62,3 +62,35 @@ Esqueleto mínimo equivalente (id, nome, versão, owner, descrição, status, us
 - A única tab com dados reais é **Workflows**, com **1 workflow** (migration) e seus steps preenchidos conforme schema.
 - As demais tabs (Skills, MCPs, Sensors, APIs) renderizam a estrutura, com cards mockados leves apenas para mostrar o formato — mas o schema delas já é o definitivo.
 - A seleção do workflow de migration no catálogo deve disparar a hidratação do to-do list do Home com os `onboarding steps` do workflow.
+
+## Estado atual — iterações pós-MVP (2026-05-15)
+
+### Implementação
+
+- `database.ts` é o catálogo. `workflows: WorkflowAsset[]` contém apenas `migrationWorkflow` (primário). `migrationExecutionWorkflow` e `hmlPromotionWorkflow` ficam como exports separados, referenciados via `step.triggers` — não aparecem na vitrine, são execuções ligadas.
+- Click em "Usar" no card de workflow chama `useWorkflows().addWorkflow(wf.id)` → cria `WorkflowInstance`, navega pra `/`.
+
+### Schema expandido — `OnboardingStep`
+
+Campos adicionados ao MVP original (`id`, `title`, `description`, `required`, `dependsOn[]`):
+
+- `completedOnClick: boolean` — passo é concluído ao clique direto no card "Próximos passos" da Home. True pra `step-01-install-cli`, `step-02-permission-cloud`, `step-04-configure-workflow`, `step-07-promote-hml`. False pra steps que precisam de sinal externo (`step-03-select-repos`, `step-06-validate-dev`).
+- `ctaLabel: string` — texto do botão de CTA renderizado no card de passos da Home.
+- `triggers?: WorkflowAsset` — workflow disparado automaticamente quando o passo é concluído. step-04 → `migrationExecutionWorkflow`; step-07 → `hmlPromotionWorkflow`. A instância gerada aparece no `WorkflowTrackerList` filtrado por execuções.
+- `agentic?: AgenticPropositionMetadata` — proposição agêntica (kind 'pr' + prTitle, prAuthor, prSummary, files com hunks de diff). Quando presente, exige Accept/Decline humano no Workflow Tracker Detail e povoa `pendingAgenticFlow` da instância.
+- `finalStep?: boolean` — marca o último passo. Ao entrar nele, o workflow já é considerado `completed` (eager-complete) — hub do Application Hub é provisionado, alerta é emitido, e os `triggers` do próprio finalStep disparam via provider.
+
+### Schema expandido — `WorkflowAsset`
+
+Mantido o schema do MVP. Nenhum campo adicionado no asset em si — todo o controle de fluxo migrou pros steps.
+
+### Steps canônicos do `migrationWorkflow` atual
+
+`step-01-install-cli`, `step-02-permission-cloud`, `step-03-select-repos`, `step-04-configure-workflow` (triggers `migrationExecutionWorkflow`), `step-06-validate-dev`, `step-07-promote-hml` (triggers `hmlPromotionWorkflow`, `finalStep: true`).
+
+Steps `step-05-trigger-first-run` e `step-08-setup-observability` foram **removidos** ao longo das iterações — registrados em PROGRESS pra histórico.
+
+### Workflows de execução
+
+- **`migrationExecutionWorkflow`** (id `wf-onboarding-vanilla-exec`) — pipeline disparado ao concluir step-04. 5 steps: build (Konstructor) → **agentic-java-21-upgrade** (agente propõe PR Java 8 → 21) → deploy (Kaptain) → migration (dual-write) → rollout (Traffik).
+- **`hmlPromotionWorkflow`** (id `wf-promote-hml`) — disparado ao entrar/concluir step-07. 4 steps: canário 5% → canário 50% (gate humano) → canário 100% → smoke test.

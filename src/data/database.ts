@@ -42,6 +42,12 @@ export type OnboardingStep = {
    * humana explícita (Accept/Decline) antes de continuar o fluxo.
    */
   agentic?: AgenticPropositionMetadata
+  /**
+   * Marca o passo como "última ação". Quando todos os passos não-finais
+   * estão concluídos, o fluxo é considerado 100% completo — esse passo
+   * fica renderizado separadamente como um último CTA destacado.
+   */
+  finalStep?: boolean
 }
 
 export type AgenticPropositionMetadata = {
@@ -437,15 +443,7 @@ export const migrationWorkflow: WorkflowAsset = {
       completedOnClick: true,
       ctaLabel: 'Promover pra HML',
       triggers: hmlPromotionWorkflow,
-    },
-    {
-      id: 'step-08-setup-observability',
-      title: 'Observabilidade',
-      description: 'Dashboards Datadog e monitores p99 / erro %.',
-      required: true,
-      dependsOn: ['step-07-promote-hml'],
-      completedOnClick: true,
-      ctaLabel: 'Ver Saúde no Application Hub',
+      finalStep: true,
     },
   ],
   dependencies: {
@@ -511,6 +509,8 @@ export type ApplicationHub = {
   id: string
   /** SA Itaú (Sigla App) — também usado como slug de URL. */
   sa: string
+  /** Nome amigável da aplicação (ex.: "Pix Core"). */
+  name: string
   /** Projeto/programa ao qual a SA pertence. */
   projectId: string
   squad: string

@@ -123,3 +123,66 @@
 **Decisão sobre React Flow**: usuário pediu "stepper do React Flow". Não instalei a lib `@xyflow/react` — o screen já tem um stepper SVG custom de 1042 linhas e refatorar pra React Flow seria um lift desproporcional pro wireframe. Mantive o visual atual (nodes posicionados + edges Bezier SVG) que já mimetiza React Flow visualmente, e adicionei o nó agêntico no mesmo paradigma. Se for promovido pra produção, vale considerar a lib pra ganhar pan/zoom/minimap nativo (hoje são mock).
 
 **Decisão sobre `agentic` em `OnboardingStep`**: a metadata da PR (título, autor, summary, files, hunks) fica no campo `agentic?` da step em `database.ts`. Tipada como `AgenticPropositionMetadata` exportada — `WorkflowTrackerDetail` importa pra renderizar o diff. Mantém data centralizada e permite ampliar pra outros tipos de proposição agêntica futuramente (não-PR).
+
+## 2026-05-15 — pendingAgenticFlow agregado na Home
+
+**Mudanças**
+- `WorkflowsProvider`: `WorkflowInstance` ganhou `pendingAgenticFlow: PendingAgenticFlowItem[]` (stepId, stepTitle, prTitle, prAuthor). `buildInstance` filtra `template.onboardingSteps` por `s.agentic` e popula o array — instâncias do `migrationExecutionWorkflow` nascem com 1 item (Java 8→21 PR); demais templates nascem com `[]`.
+- `01-Home.tsx`: card "Fluxos agênticos pendentes aprovação" deixou de usar a const hardcoded `pendingApprovals` (deletada). Agora faz `instances.flatMap((wf) => wf.pendingAgenticFlow.map(item => ({...item, workflowInstanceId, workflowName})))`. Cada linha vira `<Link to="/workflows/<id>">` com ícone Sparkles + badge "agêntico" + PR title + autor; click navega pro detail do workflow onde está o Aprovar/Declinar.
+- Header do card trocou o ícone de `WorkflowIcon` (lucide Workflow) pra `Sparkles` accent — alinha com o tema "agêntico" (ícone usado também no nó agêntico do tracker).
+- `WorkflowIcon` removido dos imports (era o único caller).
+
+**Gap conhecido**: aprovar/declinar no `WorkflowTrackerDetail` ainda não remove o item do `pendingAgenticFlow` da instância correspondente — o state de approval lá é local. Pra fechar o loop, falta adicionar `resolveAgenticItem(workflowId, stepId)` ao provider e chamar em `handleApprove`/`handleDecline` do detail. Como o detail hoje usa `steps` hardcoded em vez de uma instância real do provider, o vínculo precisaria do `:id` do URL bater com `wf.id` do provider — refator pra próxima iteração.
+
+## 2026-05-15 — Polish: agentic enrichment + congrats alert + hub friendly name
+
+**Mudanças**
+- `PendingAgenticFlowItem` enriquecido: `prSummary`, `filesChanged`, `linesAdded`, `linesRemoved` (computados percorrendo `agentic.files[].hunks[].lines` e contando `kind === 'add' | 'del'`), `createdAt: string` ISO. `buildInstance` faz a contagem uma vez na criação da instância.
+- Row do card "Fluxos agênticos pendentes aprovação" na Home agora tem: timing relativo (`formatRelativeAgo` → "agora" / "há Ns" / "há Nmin" / "há Nh"), live pulse dot quando `<60s` ("fresh"), prSummary multi-linha (clamped a 2), ícone FileText + count de arquivos, +N/−N de linhas com tons success/failure, autor + workflow name.
+- Novo componente `CongratsAlert` em `01-Home.tsx`. Renderiza quando `lastWorkflow?.status === 'completed'` em lugar do `OnboardingCard`. Visual: gradient `from-success/15 via-accent/10 to-bg`, 28 círculos SVG (confete) nas cores success/accent/info/yellow com opacity 0.45, ícone `PartyPopper` em ring success, headline "Parabéns, Luigi! 🎉", 3 badges success ("N passos", "pipeline executado", "canário 100%"), CTAs accent pra `/application-hub/<sa>` e neutral pra `/workflows`.
+- `ApplicationHub` ganhou `name: string` (nome amigável). `buildHubFromTemplate` chama `toFriendlyAppName(sa)` — strip `ssa-` + title-case dos word-parts (`ssa-pix-core` → "Pix Core", `ssa-conta-corrente` → "Conta Corrente"). `04-ApplicationHub.tsx` mostra o nome na primeira linha + SA em font-mono muted na linha de baixo; header da coluna virou "Aplicação".
+
+**Decisão sobre CongratsAlert**: ficou inline em Home.tsx por enquanto (componente local). Se outros workflows ganharem celebração no futuro, vale extrair pra `src/components/CongratsAlert.tsx` e parametrizar. Os 3 badges são hardcoded "pipeline executado" e "canário 100%" porque assumem o fluxo Vanilla completo — generalizar quando aparecer outro workflow celebrável.
+
+**Decisão sobre confete SVG**: usei `Array.from({ length: 28 })` com posicionamento determinístico (modular sobre i) em vez de Math.random pra que o padrão seja estável entre renders (não flicker). Cores puxadas do tema (success, accent, info, yellow) com opacity uniforme — sem precisar de pacote de partículas.
+
+## 2026-05-15 — Resolve agentic + gate hub creation
+
+**Mudanças**
+- `WorkflowsProvider.resolveAgenticItem(workflowId, stepId)`: novo método que filtra o item correspondente do `pendingAgenticFlow` da instância. Adicionado ao tipo do contexto e exposto no value memo.
+- `WorkflowTrackerDetail`: importa `useWorkflows`, deriva `AGENTIC_TEMPLATE_STEP_ID` do `migrationExecutionWorkflow.onboardingSteps.find(s => s.agentic).id` (fallback hardcoded), e `handleApprove`/`handleDecline` agora chamam `resolveAgenticItem(wfId, AGENTIC_TEMPLATE_STEP_ID)` além de mexer no state local. Resultado: a linha some do card "Fluxos agênticos pendentes aprovação" na Home assim que o usuário decide. Fecha o gap documentado na iteração anterior.
+- `advanceStep` (provider): bloco de finish agora guarda com `const isPrimary = !executionTemplateIds.has(template.id)`. Só templates primários (não-execução) disparam `setApplicationHubs` + `setAppHubAlerts`. Execuções ligadas (`migrationExecutionWorkflow`, `hmlPromotionWorkflow`) terminam silenciosamente — não criam mais hubs/alertas duplicados nem prematuros. O hub só aparece quando `migrationWorkflow` atinge 100%, alinhado com o CongratsAlert.
+- `executionTemplateIds` importado no provider (já existia exportado do `database.ts`).
+
+**Implicação de UX**: agora o hub `ahub-ssa-pix-core` só aparece na tabela do Application Hub depois que o usuário conclui o último step da Migração Vanilla. Antes, podia aparecer mais cedo quando o `migrationExecutionWorkflow` chegava ao fim (que tipicamente ocorre antes do step-07 do primário).
+
+## 2026-05-15 — finalStep prop + render dedicado de "Último passo"
+
+**Mudanças**
+- `OnboardingStep` ganhou `finalStep?: boolean` em `database.ts`. step-07-promote-hml marcado com `finalStep: true`.
+- Tipo local `OnboardingStep` em `01-Home.tsx` ganhou o mesmo flag; mapping populando a partir do template.
+- `OnboardingCard` refatorado: separa `regularSteps` (sem finalStep) de `finalSteps` (com finalStep, hoje sempre 1). Cálculo de progresso (`doneCount`, `total`, `pct`) usa só os regulares — quando todos os regulares estão `done`, a barra mostra 100% mesmo com o finalStep ainda em curso. Atende ao requisito "fluxo já está 100% completo".
+- O finalStep é renderizado **fora** da lista principal, em uma seção dedicada com `border-t` separadora: bg `accent/[0.06]` quando ativo (todos regulares done), `opacity-60` quando ainda bloqueado pelos regulares. Header da seção tem badge "último passo" (accent) e label "fluxo 100% completo" (success) quando aplicável. Reusa `OnboardingStepRow` pra manter consistência visual.
+- Comportamento: clicar no finalStep continua chamando `onActivate(step)` → segue o mesmo fluxo de advance + triggers (`hmlPromotionWorkflow`). Após advance, status do workflow vira `completed` e `CongratsAlert` substitui o card.
+
+## 2026-05-15 — Hub eager-add ao entrar no finalStep
+
+**Mudança**
+- `WorkflowsProvider.advanceStep` ganhou variável local `enteredFinalStep` (irmã do `justFinished`). Durante o `setWorkflows`, depois de calcular o novo `currentStepIndex`, verifica se o step apontado pelo novo índice é `finalStep: true` no template. Se sim, captura a instância em `enteredFinalStep`.
+- Fora do setState, `hubTarget = justFinished ?? enteredFinalStep` é usado pra criação do `ApplicationHub` via `buildHubFromTemplate` + `setApplicationHubs` com dedupe por `hub.id`. Guard `isPrimary` continua valendo — só `migrationWorkflow` (não execuções) cria hub.
+- O `buildAlertFromTemplate` continua sendo emitido **somente** quando `justFinished` (não `enteredFinalStep`) — semanticamente o alerta de "infra parcial" é um post-mortem que só faz sentido após o pipeline completar.
+- Efeito de UX: na hora que o usuário avança do step-06 pro step-07 (finalStep), o hub `ahub-ssa-pix-core` (`Pix Core`) já aparece na tabela do `ApplicationHub.tsx`. Antes só aparecia depois do clique final no CTA "Promover pra HML".
+- `ApplicationHub.tsx` em si não mudou — continua consumindo `useWorkflows().applicationHubs`. A mudança é toda na lógica de criação no provider.
+
+## 2026-05-15 — Eager-complete da trajetória ao entrar no finalStep
+
+**Mudança**
+- `advanceStep` agora unifica os branches "naturally ended" e "entering finalStep" em uma única flag `reachedEnd = naturallyEnded || enteringFinal`. Quando entra num finalStep, ambos os mapeamentos acontecem na mesma iteração: step anterior vira `done` (completedAt = now) e o **finalStep também vira `done` imediatamente** (startedAt + completedAt = now). `currentStepIndex` salta direto pra `steps.length` e `status` vira `'completed'`.
+- O hub do Application Hub + o alerta da Application Hub agora são emitidos pelo mesmo branch unificado (`trajectoryEnded`). Antes o alerta só saía no caminho "naturally ended"; com a unificação, entrar em finalStep também produz o alerta (semanticamente consistente — a trajetória terminou).
+- Trigger do finalStep precisa disparar mesmo sem clique manual. Adicionei `finalStepTrigger: WorkflowAsset | null` capturada durante o map; depois do setState, se houver, chama `buildInstance(captured)` + `setWorkflows([...prev, instance])` com dedupe por `templateId`. Resultado: `hmlPromotionWorkflow` aparece no Workflow Tracker automaticamente.
+- Removido o handler antigo "alerta só na conclusão" (era um bloco separado) — a unificação cobre o caso.
+
+**Efeito de UX**
+- Concluir step-06 (último regular) → step-07 (finalStep) é entrado **e** já marcado `done` no mesmo frame. `workflow.status` vira `completed`. Home substitui `OnboardingCard` pelo `CongratsAlert`. `Application Hub` mostra `Pix Core (ssa-pix-core)`. `Workflow Tracker` lista a instância do `hmlPromotionWorkflow`.
+- A seção "último passo" do `OnboardingCard` (do bloco anterior) deixa de ser vista no happy path — vira código defensivo pra casos onde um workflow tenha finalStep mas ainda não foi atingido (raro).
+- Triggers em finalStep agora podem ser disparados de **duas vias**: (a) Home.handleStepActivate, quando o usuário clica diretamente em um finalStep (`completedOnClick: true`); (b) provider, ao entrar no finalStep via advance de outro step. Dedupe `prev.some(w => w.templateId === captured.id)` impede instância duplicada.

@@ -1,12 +1,11 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import {
   ArrowRight,
   ShieldCheck,
   CheckCircle2,
   AlertTriangle,
   Clock3,
-  Workflow as WorkflowIcon,
   Loader2,
   MoreHorizontal,
   Check,
@@ -16,6 +15,7 @@ import {
   Search,
   GitBranch,
   FileCode2,
+  FileText,
   Folder,
   FolderOpen,
   ChevronRight,
@@ -30,6 +30,9 @@ import {
   Database,
   Settings as SettingsIcon,
   Wrench,
+  PartyPopper,
+  LayoutGrid,
+  Trophy,
 } from 'lucide-react'
 import { useWorkflows } from '../contexts/WorkflowsProvider'
 import { executionTemplateIds, workflows as workflowTemplates } from '../data/database'
@@ -44,16 +47,8 @@ type OnboardingStep = {
   ctaLabel: string
   completedOnClick: boolean
   status: StepStatus
+  finalStep: boolean
 }
-
-const pendingApprovals: {
-  workflow: string
-  action: string
-  sa: string
-  requester: { initials: string; color: string }
-  ago: string
-  blocking: boolean
-}[] = []
 
 function EmptyState({
   icon: Icon,
@@ -1037,6 +1032,91 @@ function OnboardingPlaceholder() {
   )
 }
 
+function CongratsAlert({
+  workflowName,
+  saName,
+  totalSteps,
+}: {
+  workflowName: string
+  saName: string
+  totalSteps: number
+}) {
+  return (
+    <div className="relative overflow-hidden rounded-lg border border-success/40 bg-gradient-to-br from-success/15 via-accent/10 to-bg">
+      <svg
+        aria-hidden
+        className="pointer-events-none absolute inset-0 h-full w-full opacity-40"
+        viewBox="0 0 400 200"
+        preserveAspectRatio="none"
+      >
+        {Array.from({ length: 28 }).map((_, i) => {
+          const cx = (i * 53) % 400
+          const cy = (i * 37) % 200
+          const r = (i % 3) + 1.5
+          const palette = ['#22c55e', '#FF6B2C', '#22D3EE', '#facc15']
+          return (
+            <circle
+              key={i}
+              cx={cx}
+              cy={cy}
+              r={r}
+              fill={palette[i % palette.length]}
+              opacity={0.45}
+            />
+          )
+        })}
+      </svg>
+
+      <div className="relative px-6 py-8 text-center">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-success/40 bg-success/15 shadow-[0_0_0_6px_rgba(34,197,94,0.06)]">
+          <PartyPopper className="h-7 w-7 text-success" />
+        </div>
+        <h2 className="mt-4 text-[22px] font-semibold tracking-tight text-text-primary">
+          Parabéns, Luigi! <span aria-hidden>🎉</span>
+        </h2>
+        <p className="mx-auto mt-2 max-w-[520px] text-[13px] text-text-secondary">
+          O fluxo <span className="font-mono text-text-primary">{workflowName}</span> para a SA{' '}
+          <span className="font-mono text-text-primary">{saName}</span> foi concluído com sucesso.
+          Sua aplicação está <span className="text-success">on-platform</span> e saudável em HML.
+        </p>
+
+        <div className="mx-auto mt-4 flex max-w-[520px] items-center justify-center gap-2 text-[11px] text-text-muted">
+          <span className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-success">
+            <Check className="h-3 w-3" />
+            {totalSteps} passos
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-success">
+            <Check className="h-3 w-3" />
+            pipeline executado
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-success">
+            <Check className="h-3 w-3" />
+            canário 100%
+          </span>
+        </div>
+
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+          <Link
+            to={`/application-hub/${saName}`}
+            className="inline-flex h-9 items-center gap-2 rounded-md bg-accent px-4 text-[12.5px] font-medium text-black transition hover:bg-accent-hover"
+          >
+            <LayoutGrid className="h-3.5 w-3.5" />
+            Ver Application Hub
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+          <Link
+            to="/workflows"
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-bg px-4 text-[12.5px] text-text-secondary transition hover:border-border-strong hover:text-text-primary"
+          >
+            <Trophy className="h-3.5 w-3.5" />
+            Workflow Tracker
+          </Link>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function OnboardingCard({
   steps,
   contextLabel,
@@ -1060,10 +1140,14 @@ function OnboardingCard({
     )
   }
 
-  const total = steps.length
-  const doneCount = steps.filter((s) => s.status === 'done').length
-  const pct = Math.round((doneCount / total) * 100)
-  const inProgressIdx = steps.findIndex((s) => s.status === 'in-progress')
+  const regularSteps = steps.filter((s) => !s.finalStep)
+  const finalSteps = steps.filter((s) => s.finalStep)
+  const finalStep = finalSteps[0]
+  const total = regularSteps.length || steps.length
+  const doneCount = regularSteps.filter((s) => s.status === 'done').length
+  const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0
+  const inProgressIdx = regularSteps.findIndex((s) => s.status === 'in-progress')
+  const allRegularDone = doneCount === total
 
   return (
     <div className="rounded-lg border border-border bg-surface">
@@ -1089,7 +1173,7 @@ function OnboardingCard({
         </div>
       </div>
       <ul>
-        {steps.map((s, i) => {
+        {regularSteps.map((s, i) => {
           const attenuated =
             s.status === 'not-started' && inProgressIdx >= 0 && i > inProgressIdx
           return (
@@ -1102,12 +1186,35 @@ function OnboardingCard({
           )
         })}
       </ul>
+
+      {finalStep && (
+        <div
+          className={`border-t border-border px-4 py-3 ${
+            allRegularDone ? 'bg-accent/[0.06]' : 'opacity-60'
+          }`}
+        >
+          <div className="mb-2 flex items-center gap-2">
+            <span className="rounded-full border border-accent/40 bg-accent/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-accent">
+              último passo
+            </span>
+            {allRegularDone && (
+              <span className="text-[10.5px] uppercase tracking-wider text-success">
+                fluxo 100% completo
+              </span>
+            )}
+          </div>
+          <OnboardingStepRow
+            step={finalStep}
+            attenuated={!allRegularDone}
+            onActivate={onActivate}
+          />
+        </div>
+      )}
     </div>
   )
 }
 
 export default function Home() {
-  const navigate = useNavigate()
   const { workflows: instances, advanceStep, addWorkflow, appHubAlerts } = useWorkflows()
   const primaryInstance = [...instances]
     .reverse()
@@ -1135,6 +1242,7 @@ export default function Home() {
             ctaLabel: tmplStep?.ctaLabel ?? 'Abrir',
             completedOnClick: tmplStep?.completedOnClick ?? false,
             status,
+            finalStep: tmplStep?.finalStep ?? false,
           }
         })
       })()
@@ -1159,14 +1267,30 @@ export default function Home() {
       if (!alreadyTriggered) addWorkflow(tmplStep.triggers)
     }
 
-    if (step.stepId === 'step-08-setup-observability') {
-      navigate('/application-hub')
-    }
   }
 
   const handleRepoConfirm = () => {
     if (lastWorkflow) advanceStep(lastWorkflow.id)
     setRepoModalOpen(false)
+  }
+
+  const pendingAgenticItems = instances.flatMap((wf) =>
+    wf.pendingAgenticFlow.map((item) => ({
+      ...item,
+      workflowInstanceId: wf.id,
+      workflowName: wf.templateName,
+    })),
+  )
+
+  const formatRelativeAgo = (iso: string): string => {
+    const elapsedMs = Date.now() - new Date(iso).getTime()
+    if (Number.isNaN(elapsedMs) || elapsedMs < 5000) return 'agora'
+    const sec = Math.floor(elapsedMs / 1000)
+    if (sec < 60) return `há ${sec}s`
+    const min = Math.floor(sec / 60)
+    if (min < 60) return `há ${min}min`
+    const hr = Math.floor(min / 60)
+    return `há ${hr}h`
   }
 
   return (
@@ -1179,16 +1303,107 @@ export default function Home() {
         </p>
       </section>
 
-      {/* Section 2 — Onboarding card */}
-      <section>
-        <OnboardingCard
-          steps={onboardingSteps}
-          contextLabel={lastWorkflow?.templateName}
-          onActivate={handleStepActivate}
-        />
+      {/* Section 2 — Onboarding card (ou alert de congrats se 100%) + Fluxos pendentes (50/50) */}
+      <section className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        {lastWorkflow?.status === 'completed' ? (
+          <CongratsAlert
+            workflowName={lastWorkflow.templateName}
+            saName={(() => {
+              const tmpl = workflowTemplates.find((t) => t.id === lastWorkflow.templateId)
+              return (
+                tmpl?.inputs.find((i) => i.name === 'sa_id')?.default ?? 'ssa-pix-core'
+              )
+            })()}
+            totalSteps={lastWorkflow.steps.length}
+          />
+        ) : (
+          <OnboardingCard
+            steps={onboardingSteps}
+            contextLabel={lastWorkflow?.templateName}
+            onActivate={handleStepActivate}
+          />
+        )}
+
+        <div className="rounded-lg border border-border bg-surface">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-3.5 w-3.5 text-accent" />
+              <h3 className="text-[13.5px] font-semibold tracking-tight">
+                Fluxos agênticos pendentes aprovação
+              </h3>
+            </div>
+            {pendingAgenticItems.length > 0 && (
+              <span className="rounded-full bg-warning/10 px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wide text-warning">
+                {pendingAgenticItems.length} aguardando
+              </span>
+            )}
+          </div>
+          {pendingAgenticItems.length === 0 ? (
+            <EmptyState
+              icon={CheckCircle2}
+              title="Nenhuma aprovação pendente"
+              hint="Quando um workflow agêntico precisar de input humano, ele aparece aqui."
+            />
+          ) : (
+            <ul>
+              {pendingAgenticItems.map((p) => {
+                const ago = formatRelativeAgo(p.createdAt)
+                const isFresh = Date.now() - new Date(p.createdAt).getTime() < 60000
+                return (
+                  <Link
+                    key={`${p.workflowInstanceId}-${p.stepId}`}
+                    to={`/workflows/${p.workflowInstanceId}`}
+                    className="group flex cursor-pointer items-start gap-3 border-b border-border px-4 py-3 last:border-b-0 hover:bg-[#181A1F]"
+                  >
+                    <span className="relative mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-md bg-accent/15 text-accent">
+                      <Sparkles className="h-3.5 w-3.5" />
+                      {isFresh && (
+                        <span className="absolute -right-0.5 -top-0.5 flex h-2 w-2">
+                          <span className="absolute inline-flex h-full w-full animate-pulse-live rounded-full bg-live opacity-80" />
+                          <span className="relative inline-flex h-2 w-2 rounded-full bg-live" />
+                        </span>
+                      )}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate text-[12.5px] font-medium text-text-primary">
+                          {p.stepTitle}
+                        </span>
+                        <span className="flex-none rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-accent">
+                          agêntico
+                        </span>
+                        <span className="flex-none text-[10.5px] text-text-muted">{ago}</span>
+                      </div>
+                      <div className="mt-0.5 truncate font-mono text-[11.5px] text-text-secondary">
+                        {p.prTitle}
+                      </div>
+                      <div className="mt-0.5 line-clamp-2 text-[11px] text-text-muted">
+                        {p.prSummary}
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10.5px] text-text-muted">
+                        <span className="font-mono">{p.prAuthor}</span>
+                        <span>·</span>
+                        <span className="inline-flex items-center gap-1">
+                          <FileText className="h-2.5 w-2.5" />
+                          <span className="font-mono">{p.filesChanged}</span> arquivos
+                        </span>
+                        <span>·</span>
+                        <span className="font-mono text-success">+{p.linesAdded}</span>
+                        <span className="font-mono text-failure">−{p.linesRemoved}</span>
+                        <span>·</span>
+                        <span className="font-mono">{p.workflowName}</span>
+                      </div>
+                    </div>
+                    <ArrowRight className="mt-1 h-3.5 w-3.5 flex-none text-text-muted opacity-0 transition group-hover:opacity-100" />
+                  </Link>
+                )
+              })}
+            </ul>
+          )}
+        </div>
       </section>
 
-      {/* Section 3 — Resumo de pontos de atenção */}
+      {/* Section 3 — Alertas da Application Hub */}
       <section>
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -1196,67 +1411,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <div className="rounded-lg border border-border bg-surface">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <div className="flex items-center gap-2">
-                <WorkflowIcon className="h-3.5 w-3.5 text-text-muted" />
-                <h3 className="text-[13.5px] font-semibold tracking-tight">
-                  Fluxos agênticos pendentes aprovação
-                </h3>
-              </div>
-              {pendingApprovals.length > 0 && (
-                <span className="rounded-full bg-warning/10 px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wide text-warning">
-                  {pendingApprovals.length} aguardando
-                </span>
-              )}
-            </div>
-            {pendingApprovals.length === 0 ? (
-              <EmptyState
-                icon={CheckCircle2}
-                title="Nenhuma aprovação pendente"
-                hint="Quando um workflow agêntico precisar de input humano, ele aparece aqui."
-              />
-            ) : (
-              <ul>
-                {pendingApprovals.map((p) => (
-                  <li
-                    key={p.workflow + p.sa + p.ago}
-                    className="group flex cursor-pointer items-start gap-3 border-b border-border px-4 py-3 last:border-b-0 hover:bg-[#181A1F]"
-                  >
-                    <span className="mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-md bg-warning/15 text-warning">
-                      <Clock3 className="h-3.5 w-3.5" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="truncate font-mono text-[12.5px] text-text-primary">
-                          {p.workflow}
-                        </span>
-                        {p.blocking && (
-                          <span className="flex-none rounded border border-failure/30 bg-failure/10 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-failure">
-                            blocking
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-0.5 truncate text-[12px] text-text-secondary">{p.action}</div>
-                      <div className="mt-1 flex items-center gap-2 text-[11px] text-text-muted">
-                        <span className="font-mono">{p.sa}</span>
-                        <span>·</span>
-                        <span
-                          className={`flex h-4 w-4 items-center justify-center rounded-full text-[9.5px] font-medium ${p.requester.color}`}
-                        >
-                          {p.requester.initials}
-                        </span>
-                        <span className="font-mono">há {p.ago}</span>
-                      </div>
-                    </div>
-                    <ArrowRight className="mt-1 h-3.5 w-3.5 flex-none text-text-muted opacity-0 transition group-hover:opacity-100" />
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
+        <div className="grid grid-cols-1 gap-5">
           <div className="rounded-lg border border-border bg-surface">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <div className="flex items-center gap-2">

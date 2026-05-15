@@ -64,3 +64,71 @@ Dados mockados:
 
 \- Mistura de success de diferentes tempos
 
+
+
+\## Estado atual — iterações pós-MVP (2026-05-15)
+
+
+
+\### Fonte de dados
+
+
+
+Lista consome `useWorkflows().workflows` (state runtime) e filtra para mostrar \*\*só execuções ligadas\*\* — instâncias cujo `templateId ∈ executionTemplateIds`. Workflows primários (onboarding na Home) ficam fora da listagem.
+
+
+
+Empty state direciona o usuário pra Home (não mais pro Catalog): "Execuções aparecem aqui quando um workflow de onboarding lança seu pipeline ligado".
+
+
+
+\### Filtros
+
+
+
+\- Multi-select de status `running | success | failed | awaiting | cancelled` mantido.
+
+\- \*\*Default ativo: `running`\*\* — usuário já abre vendo workflows em execução. "Limpar" remove todos os filtros.
+
+
+
+\### Tabela — colunas atuais
+
+
+
+| Status | Nome | Step atual | Duração | Custo (R$) | \*\*Ação\*\* |
+
+|---|---|---|---|---|---|
+
+| ícone por status | templateName + wfId/templateId | `idx/total` + step.title | `formatDuration(startedAt)` | — | \*\*botão "Avançar/Concluir" por linha\*\* |
+
+
+
+Ícones de status:
+
+\- `success` → `CheckCircle2` verde
+
+\- `failed` → `XCircle` vermelho
+
+\- `cancelled` → `CircleSlash` muted
+
+\- `running` → `Loader2` info girando
+
+\- `awaiting` → `Loader2` warning estático
+
+
+
+\### Coluna "Ação"
+
+
+
+Botão accent com ícone `Check` chamando `advanceStep(w.id)` no clique (com `stopPropagation` pra não disparar a navegação da linha). Label muda pra "Concluir" quando é o último step; senão "Avançar". Workflows em status `completed`/`failed` mostram label "encerrado" sem botão.
+
+
+
+\### Navegação
+
+
+
+Click na linha (não no botão) navega pra `/workflows/{w.id}`.
+

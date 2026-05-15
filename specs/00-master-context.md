@@ -138,3 +138,55 @@ Protótipo 0 = baixa fidelidade funcional. Precisa: hierarquia visual clara, den
 
 \- Live indicator: #22D3EE (com pulse)
 
+
+
+\# Estado atual — iterações pós-MVP (2026-05-15)
+
+
+
+Esta seção registra o estado de implementação posterior às specs originais. Source-of-truth pra desenhos novos: PROGRESS.md + NOTES.md.
+
+
+
+\## Arquitetura de dados
+
+
+
+\- \*\*`src/data/database.ts`\*\* é a fonte canônica de dados mockados. Exporta tipos (`WorkflowAsset`, `OnboardingStep`, `ApplicationHub`, `ApplicationHubHealth`, `ApplicationHubNotification`, `AgenticPropositionMetadata`), templates (`migrationWorkflow`, `migrationExecutionWorkflow`, `hmlPromotionWorkflow`), arrays (`workflows`, `applicationHubs`, `applicationHubNotifications`) e o helper derivado `executionTemplateIds: Set<string>` que enumera os templates que são execuções ligadas (referenciados via `step.triggers`).
+
+\- \*\*`src/contexts/WorkflowsProvider.tsx`\*\* mantém o estado runtime: `workflows: WorkflowInstance[]`, `applicationHubs: ApplicationHub[]` (seedado de `database.ts`), `appHubAlerts: AppHubAlert[]`. Expõe `addWorkflow(stringOrAsset)`, `advanceStep(workflowId)`, `advanceStatus`, `getWorkflow`, `resolveAgenticItem(workflowId, stepId)`.
+
+\- Todas as telas consomem da provider; o seed estático de `applicationHubs` está vazio — hubs aparecem dinamicamente quando o usuário conclui (ou entra no finalStep de) um workflow primário.
+
+
+
+\## Conceitos adicionados
+
+
+
+\- \*\*Workflow primário vs execução ligada\*\*: workflows em `workflows[]` (catálogo) são primários. Steps podem ter `triggers?: WorkflowAsset` que ao serem concluídos enfileiram instâncias de execução. `executionTemplateIds` separa os dois.
+
+\- \*\*`OnboardingStep.completedOnClick: boolean`\*\* — quando true, o passo é concluído ao clique direto no card "Próximos passos" da Home.
+
+\- \*\*`OnboardingStep.ctaLabel: string`\*\* — texto do botão de CTA por passo (vem do `database.ts`).
+
+\- \*\*`OnboardingStep.triggers?: WorkflowAsset`\*\* — workflow disparado quando o passo termina; aparece no Workflow Tracker.
+
+\- \*\*`OnboardingStep.agentic?: AgenticPropositionMetadata`\*\* — proposição agêntica (PR com files/hunks); requer aprovação humana no Workflow Tracker Detail.
+
+\- \*\*`OnboardingStep.finalStep?: boolean`\*\* — marca o último passo. Ao entrar nele, o workflow já é considerado `completed` (eager-complete), hub é provisionado, alerta é emitido e triggers do finalStep disparam automaticamente.
+
+\- \*\*`WorkflowInstance.pendingAgenticFlow: PendingAgenticFlowItem[]`\*\* — itens agênticos pendentes de aprovação humana (populado em `buildInstance` a partir de `step.agentic`); a Home agrega via `flatMap` e renderiza no card "Fluxos agênticos pendentes aprovação".
+
+\- \*\*`AppHubAlert`\*\* — alerta de falha parcial de infra emitido na conclusão do workflow primário; aparece no card "Alertas da Application Hub" da Home.
+
+
+
+\## Verbos da Operação Vanilla — extensão
+
+
+
+Foram adicionados conceitualmente:
+
+\- \*\*Agente\*\* (cor `accent` + ícone Sparkles): passo agêntico que requer Accept/Decline humano. Aparece como 5º "verbo" na visualização do Workflow Tracker Detail. Edges roteiam Build → Agente → Deploy quando aplicável.
+

@@ -31,6 +31,7 @@ import {
   GitPullRequest,
 } from 'lucide-react'
 import { migrationExecutionWorkflow, type AgenticPropositionMetadata } from '../data/database'
+import { useWorkflows } from '../contexts/WorkflowsProvider'
 
 type StepStatus = 'pending' | 'running' | 'success' | 'failed' | 'skipped'
 type Verb = 'build' | 'agentic' | 'deploy' | 'migration' | 'rollout'
@@ -51,9 +52,12 @@ type Step = {
 }
 
 const AGENTIC_STEP_ID = 'step-agentic-java-21'
+const AGENTIC_TEMPLATE_STEP_ID =
+  migrationExecutionWorkflow.onboardingSteps.find((s) => s.agentic)?.id ??
+  'agentic-java-21-upgrade'
 const agenticMetadata =
   migrationExecutionWorkflow.onboardingSteps.find(
-    (s) => s.id === 'agentic-java-21-upgrade',
+    (s) => s.id === AGENTIC_TEMPLATE_STEP_ID,
   )?.agentic ?? null
 
 type Edge = {
@@ -1202,14 +1206,21 @@ function CostTab() {
 
 export default function WorkflowTrackerDetail() {
   const { id } = useParams<{ id: string }>()
+  const { resolveAgenticItem } = useWorkflows()
   const [tab, setTab] = useState<TabKey>('fluxo')
   const [selectedId, setSelectedId] = useState<string | null>(AGENTIC_STEP_ID)
   const [approval, setApproval] = useState<ApprovalState>('pending')
 
   const wfId = id ?? 'wf-abc123'
 
-  const handleApprove = () => setApproval('accepted')
-  const handleDecline = () => setApproval('declined')
+  const handleApprove = () => {
+    setApproval('accepted')
+    resolveAgenticItem(wfId, AGENTIC_TEMPLATE_STEP_ID)
+  }
+  const handleDecline = () => {
+    setApproval('declined')
+    resolveAgenticItem(wfId, AGENTIC_TEMPLATE_STEP_ID)
+  }
 
   return (
     <div className="space-y-5">
