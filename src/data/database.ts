@@ -42,12 +42,6 @@ export type OnboardingStep = {
    * humana explícita (Accept/Decline) antes de continuar o fluxo.
    */
   agentic?: AgenticPropositionMetadata
-  /**
-   * Marca o passo como "última ação". Quando todos os passos não-finais
-   * estão concluídos, o fluxo é considerado 100% completo — esse passo
-   * fica renderizado separadamente como um último CTA destacado.
-   */
-  finalStep?: boolean
 }
 
 export type AgenticPropositionMetadata = {
@@ -443,7 +437,6 @@ export const migrationWorkflow: WorkflowAsset = {
       completedOnClick: true,
       ctaLabel: 'Promover pra HML',
       triggers: hmlPromotionWorkflow,
-      finalStep: true,
     },
   ],
   dependencies: {

@@ -10,10 +10,9 @@ import {
   Cable,
   ArrowRight,
   CheckCircle2,
-  GitBranch,
   Tag,
-  Database,
   User,
+  Zap,
 } from 'lucide-react'
 import { workflows, type AssetStatus, type WorkflowAsset } from '../data/database'
 import { useWorkflows } from '../contexts/WorkflowsProvider'
@@ -357,36 +356,6 @@ function EmptyAssetList({ kind }: { kind: TabKey }) {
   )
 }
 
-function DependencyRow({
-  icon: Icon,
-  label,
-  items,
-}: {
-  icon: typeof Sparkles
-  label: string
-  items: string[]
-}) {
-  return (
-    <div className="rounded-md border border-border bg-bg px-3 py-2">
-      <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-text-muted">
-        <Icon className="h-3 w-3" />
-        {label}
-        <span className="font-mono normal-case tracking-normal">({items.length})</span>
-      </div>
-      <div className="mt-1.5 flex flex-wrap gap-1.5">
-        {items.map((it) => (
-          <span
-            key={it}
-            className="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-[11px] text-text-secondary"
-          >
-            {it}
-          </span>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 function WorkflowItem({
   wf,
   expanded,
@@ -453,12 +422,14 @@ function WorkflowItem({
       </button>
 
       {!expanded ? null : (
-      <div className="grid grid-cols-1 gap-5 px-5 py-5 lg:grid-cols-[1.4fr_1fr]">
-        <div>
+      <div className="space-y-5 px-5 py-5">
+        <section>
           <div className="mb-2 flex items-center gap-2">
             <CheckCircle2 className="h-3.5 w-3.5 text-text-muted" />
-            <h4 className="text-[12.5px] font-semibold tracking-tight">Onboarding steps</h4>
-            <span className="text-[11px] text-text-muted">consumidos pelo to-do contextual do Home</span>
+            <h4 className="text-[12.5px] font-semibold tracking-tight">Steps</h4>
+            <span className="text-[11px] text-text-muted">
+              {wf.onboardingSteps.length} passos · consumidos pelo to-do contextual do Home
+            </span>
           </div>
           <ol className="space-y-2">
             {wf.onboardingSteps.map((s, i) => (
@@ -470,7 +441,7 @@ function WorkflowItem({
                   {i + 1}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-[11.5px] text-text-muted">{s.id}</span>
                     {s.required ? (
                       <span className="rounded border border-failure/30 bg-failure/10 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-failure">
@@ -481,76 +452,83 @@ function WorkflowItem({
                         optional
                       </span>
                     )}
+                    {s.completedOnClick && (
+                      <span className="rounded border border-info/30 bg-info/10 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-info">
+                        click → done
+                      </span>
+                    )}
+                    {s.agentic && (
+                      <span className="inline-flex items-center gap-1 rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-accent">
+                        <Sparkles className="h-2.5 w-2.5" />
+                        agêntico
+                      </span>
+                    )}
+                    {s.triggers && (
+                      <span className="inline-flex items-center gap-1 rounded border border-warning/30 bg-warning/10 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-warning">
+                        <Zap className="h-2.5 w-2.5" />
+                        triggers
+                      </span>
+                    )}
                   </div>
                   <div className="mt-0.5 text-[12.5px] text-text-primary">{s.title}</div>
                   <div className="mt-0.5 text-[11.5px] text-text-muted">{s.description}</div>
-                  {s.dependsOn.length > 0 && (
-                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10.5px] text-text-muted">
-                      <span className="uppercase tracking-wider">depende de</span>
-                      {s.dependsOn.map((d) => (
-                        <span key={d} className="rounded border border-border bg-surface px-1.5 py-0.5 font-mono">
-                          {d}
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px] text-text-muted">
+                    <span className="inline-flex items-center gap-1">
+                      <span className="uppercase tracking-wider">CTA</span>
+                      <span className="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-text-secondary">
+                        {s.ctaLabel}
+                      </span>
+                    </span>
+                    {s.dependsOn.length > 0 && (
+                      <span className="flex flex-wrap items-center gap-1">
+                        <span className="uppercase tracking-wider">depende de</span>
+                        {s.dependsOn.map((d) => (
+                          <span
+                            key={d}
+                            className="rounded border border-border bg-surface px-1.5 py-0.5 font-mono"
+                          >
+                            {d}
+                          </span>
+                        ))}
+                      </span>
+                    )}
+                    {s.triggers && (
+                      <span className="flex items-center gap-1">
+                        <span className="uppercase tracking-wider">dispara</span>
+                        <span className="rounded border border-warning/30 bg-warning/5 px-1.5 py-0.5 font-mono text-warning">
+                          {s.triggers.id}
                         </span>
-                      ))}
+                      </span>
+                    )}
+                  </div>
+                  {s.agentic && (
+                    <div className="mt-2 rounded border border-accent/25 bg-accent/[0.04] px-2.5 py-2 text-[11px]">
+                      <div className="flex items-center gap-1.5 text-accent">
+                        <Sparkles className="h-3 w-3" />
+                        <span className="font-mono text-text-primary">{s.agentic.prTitle}</span>
+                      </div>
+                      <div className="mt-0.5 text-[10.5px] text-text-muted">
+                        por <span className="font-mono">{s.agentic.prAuthor}</span> ·{' '}
+                        <span className="font-mono">{s.agentic.files.length}</span> arquivos
+                      </div>
+                      <div className="mt-1 line-clamp-2 text-text-secondary">
+                        {s.agentic.prSummary}
+                      </div>
                     </div>
                   )}
                 </div>
               </li>
             ))}
           </ol>
-        </div>
+        </section>
 
-        <div className="space-y-5">
-          <section>
-            <div className="mb-2 flex items-center gap-2">
-              <GitBranch className="h-3.5 w-3.5 text-text-muted" />
-              <h4 className="text-[12.5px] font-semibold tracking-tight">Dependências</h4>
-            </div>
-            <div className="space-y-2">
-              <DependencyRow icon={Sparkles} label="Skills" items={wf.dependencies.skills} />
-              <DependencyRow icon={Plug} label="MCPs" items={wf.dependencies.mcps} />
-              <DependencyRow icon={Cable} label="APIs" items={wf.dependencies.apis} />
-            </div>
-          </section>
-
-          <section>
-            <div className="mb-2 flex items-center gap-2">
-              <Database className="h-3.5 w-3.5 text-text-muted" />
-              <h4 className="text-[12.5px] font-semibold tracking-tight">Inputs esperados</h4>
-            </div>
-            <ul className="divide-y divide-border rounded-md border border-border bg-bg">
-              {wf.inputs.map((inp) => (
-                <li key={inp.name} className="px-3 py-2.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-[12px] text-text-primary">{inp.name}</span>
-                      {inp.required && (
-                        <span className="rounded border border-failure/30 bg-failure/10 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-failure">
-                          required
-                        </span>
-                      )}
-                    </div>
-                    <span className="font-mono text-[10.5px] text-text-muted">{inp.type}</span>
-                  </div>
-                  <div className="mt-0.5 text-[11.5px] text-text-muted">{inp.description}</div>
-                  {inp.default && (
-                    <div className="mt-0.5 font-mono text-[10.5px] text-text-muted">
-                      default: <span className="text-text-secondary">{inp.default}</span>
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          <section className="rounded-md border border-border bg-bg px-3 py-2.5">
-            <div className="flex items-center gap-2 text-[11px] text-text-muted">
-              <Tag className="h-3 w-3" />
-              <span className="uppercase tracking-wider">Maturidade</span>
-              <span className="font-mono text-text-secondary">{wf.maturity}</span>
-            </div>
-          </section>
-        </div>
+        <section className="rounded-md border border-border bg-bg px-3 py-2.5">
+          <div className="flex items-center gap-2 text-[11px] text-text-muted">
+            <Tag className="h-3 w-3" />
+            <span className="uppercase tracking-wider">Maturidade</span>
+            <span className="font-mono text-text-secondary">{wf.maturity}</span>
+          </div>
+        </section>
       </div>
       )}
     </div>

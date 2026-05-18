@@ -21,6 +21,7 @@ import {
   BookOpen,
   Sparkles,
   Bot,
+  Kanban,
 } from 'lucide-react'
 
 type TabKey = 'overview' | 'infra' | 'apis' | 'observability' | 'repos' | 'history'
@@ -193,7 +194,143 @@ function Sparkline({ values, color = 'success' }: { values: number[]; color?: 's
   )
 }
 
+type UIClickStatus = 'todo' | 'in-progress' | 'review' | 'done' | 'blocked'
+type UIClickType = 'feat' | 'bug' | 'chore' | 'spike' | 'debt'
+
+const uiclickStatusMeta: Record<
+  UIClickStatus,
+  { label: string; tone: string }
+> = {
+  todo: { label: 'a fazer', tone: 'border-border bg-bg text-text-muted' },
+  'in-progress': { label: 'em curso', tone: 'border-info/30 bg-info/10 text-info' },
+  review: { label: 'em review', tone: 'border-warning/30 bg-warning/10 text-warning' },
+  done: { label: 'concluído', tone: 'border-success/30 bg-success/10 text-success' },
+  blocked: { label: 'bloqueado', tone: 'border-failure/30 bg-failure/10 text-failure' },
+}
+
+const uiclickTypeMeta: Record<UIClickType, { label: string; tone: string }> = {
+  feat: { label: 'feat', tone: 'border-accent/30 bg-accent/10 text-accent' },
+  bug: { label: 'bug', tone: 'border-failure/30 bg-failure/10 text-failure' },
+  chore: { label: 'chore', tone: 'border-border bg-bg text-text-muted' },
+  spike: { label: 'spike', tone: 'border-info/30 bg-info/10 text-info' },
+  debt: { label: 'débito', tone: 'border-warning/30 bg-warning/10 text-warning' },
+}
+
+type UIClickStory = {
+  id: string
+  type: UIClickType
+  title: string
+  status: UIClickStatus
+  assignee: { initials: string; name: string }
+  updated: string
+  points: number
+}
+
+const uiclickStories: UIClickStory[] = [
+  {
+    id: 'UIC-1234',
+    type: 'feat',
+    title: 'Idempotency key em /v1/pix/instant-pay',
+    status: 'in-progress',
+    assignee: { initials: 'LL', name: 'Luigi' },
+    updated: 'há 2h',
+    points: 5,
+  },
+  {
+    id: 'UIC-1245',
+    type: 'bug',
+    title: 'Lag de dual-write Aurora viola SLO no pico (18h–20h)',
+    status: 'todo',
+    assignee: { initials: 'CM', name: 'Camila' },
+    updated: 'ontem',
+    points: 8,
+  },
+  {
+    id: 'UIC-1271',
+    type: 'spike',
+    title: 'POC failover dual-region via Traffik',
+    status: 'review',
+    assignee: { initials: 'DR', name: 'Daniel' },
+    updated: 'há 5h',
+    points: 3,
+  },
+  {
+    id: 'UIC-1289',
+    type: 'chore',
+    title: 'Migrar config maps de k8s/* pra Vault (SecretProviderClass)',
+    status: 'done',
+    assignee: { initials: 'LL', name: 'Luigi' },
+    updated: 'há 2d',
+    points: 3,
+  },
+  {
+    id: 'UIC-1302',
+    type: 'feat',
+    title: 'Webhook callback assinado via JWS RS256',
+    status: 'in-progress',
+    assignee: { initials: 'DR', name: 'Daniel' },
+    updated: 'há 4h',
+    points: 13,
+  },
+  {
+    id: 'UIC-1318',
+    type: 'debt',
+    title: 'Remover endpoints v0 do contrato Pact e atualizar consumidores',
+    status: 'blocked',
+    assignee: { initials: 'PA', name: 'Paula' },
+    updated: 'há 1d',
+    points: 5,
+  },
+  {
+    id: 'UIC-1325',
+    type: 'feat',
+    title: 'Reconciliação noturna de chaves órfãs via job Pantheon',
+    status: 'todo',
+    assignee: { initials: 'CM', name: 'Camila' },
+    updated: 'há 6h',
+    points: 8,
+  },
+]
+
+function UIClickStoryRow({ story }: { story: UIClickStory }) {
+  const status = uiclickStatusMeta[story.status]
+  const type = uiclickTypeMeta[story.type]
+  return (
+    <li className="group flex cursor-pointer items-start gap-3 border-b border-border px-4 py-2.5 last:border-b-0 hover:bg-[#181A1F]">
+      <span className="mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-md border border-border bg-bg font-mono text-[9.5px] text-text-secondary">
+        {story.points}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-mono text-[11px] text-text-muted">{story.id}</span>
+          <span
+            className={`rounded border px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider ${type.tone}`}
+          >
+            {type.label}
+          </span>
+          <span
+            className={`rounded-full border px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider ${status.tone}`}
+          >
+            {status.label}
+          </span>
+        </div>
+        <div className="mt-0.5 truncate text-[12.5px] text-text-primary">{story.title}</div>
+        <div className="mt-1 flex items-center gap-2 text-[11px] text-text-muted">
+          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-accent/20 text-[9.5px] font-medium text-accent">
+            {story.assignee.initials}
+          </span>
+          <span>{story.assignee.name}</span>
+          <span>·</span>
+          <span className="font-mono">atualizado {story.updated}</span>
+        </div>
+      </div>
+      <ArrowRight className="mt-1 h-3.5 w-3.5 flex-none text-text-muted opacity-0 transition group-hover:opacity-100" />
+    </li>
+  )
+}
+
 function Overview({ app }: { app: AppDetail }) {
+  const openStoriesCount = uiclickStories.filter((s) => s.status !== 'done').length
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.4fr_1fr]">
       <div className="space-y-4">
@@ -324,6 +461,31 @@ chaves e enriquecimento antes da liquidação.
               color="success"
             />
           </div>
+        </section>
+
+        <section className="rounded-lg border border-border bg-surface">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <div className="flex items-center gap-2">
+              <Kanban className="h-3.5 w-3.5 text-text-muted" />
+              <h3 className="text-[13.5px] font-semibold tracking-tight">UIClick</h3>
+              <span className="rounded border border-border bg-bg px-1.5 py-0.5 font-mono text-[10.5px] text-text-secondary">
+                projeto · pix-core
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-[11px] text-text-muted">
+              <span className="font-mono text-text-primary">{openStoriesCount}</span> abertas ·{' '}
+              <span className="font-mono">{uiclickStories.length}</span> total
+              <span className="ml-1 inline-flex items-center gap-1 text-text-secondary hover:text-text-primary">
+                ver no UIClick
+                <ExternalLink className="h-3 w-3" />
+              </span>
+            </div>
+          </div>
+          <ul>
+            {uiclickStories.map((s) => (
+              <UIClickStoryRow key={s.id} story={s} />
+            ))}
+          </ul>
         </section>
       </div>
 

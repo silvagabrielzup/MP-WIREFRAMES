@@ -5,7 +5,8 @@
       "Bash(npm install *)",
       "Bash(git push *)",
       "Bash(git add *)",
-      "Bash(awk END{print NR} *)"
+      "Bash(awk END{print NR} *)",
+      "WebSearch"
     ]
   }
 }

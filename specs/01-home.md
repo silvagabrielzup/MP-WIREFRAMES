@@ -88,7 +88,7 @@ Detalhamento completo em `components/onboarding-card.md` (seção "Estado atual"
 
 \- Quando `lastWorkflow.status === 'completed'`, o card é \*\*substituído\*\* pelo componente `CongratsAlert` (gradient success → accent + confete SVG + PartyPopper + CTAs pra Application Hub e Workflow Tracker).
 
-\- Caso contrário, renderiza `OnboardingCard` com lista de passos + seção "último passo" separada (finalStep) se houver.
+\- Caso contrário, renderiza `OnboardingCard` com a lista sequencial de passos.
 
 
 
@@ -122,7 +122,7 @@ Detalhamento completo em `components/onboarding-card.md` (seção "Estado atual"
 
 \- Header com ícone `AlertTriangle` muted.
 
-\- Lista deriva de `useWorkflows().appHubAlerts` (state da provider). Itens são emitidos pelo `advanceStep` quando o workflow primário conclui (incluindo entrada no finalStep).
+\- Lista deriva de `useWorkflows().appHubAlerts` (state da provider). Itens são emitidos pelo `advanceStep` quando o workflow primário conclui.
 
 \- Cada alerta tem `kind: 'approval' | 'failure' | 'policy'` mapeando pra ícone (Clock3 / AlertTriangle / ShieldCheck) e cor (warning / failure / info).
 

@@ -156,7 +156,7 @@ Esta seção registra o estado de implementação posterior às specs originais.
 
 \- \*\*`src/contexts/WorkflowsProvider.tsx`\*\* mantém o estado runtime: `workflows: WorkflowInstance[]`, `applicationHubs: ApplicationHub[]` (seedado de `database.ts`), `appHubAlerts: AppHubAlert[]`. Expõe `addWorkflow(stringOrAsset)`, `advanceStep(workflowId)`, `advanceStatus`, `getWorkflow`, `resolveAgenticItem(workflowId, stepId)`.
 
-\- Todas as telas consomem da provider; o seed estático de `applicationHubs` está vazio — hubs aparecem dinamicamente quando o usuário conclui (ou entra no finalStep de) um workflow primário.
+\- Todas as telas consomem da provider; o seed estático de `applicationHubs` está vazio — hubs aparecem dinamicamente quando o usuário conclui um workflow primário.
 
 
 
@@ -173,8 +173,6 @@ Esta seção registra o estado de implementação posterior às specs originais.
 \- \*\*`OnboardingStep.triggers?: WorkflowAsset`\*\* — workflow disparado quando o passo termina; aparece no Workflow Tracker.
 
 \- \*\*`OnboardingStep.agentic?: AgenticPropositionMetadata`\*\* — proposição agêntica (PR com files/hunks); requer aprovação humana no Workflow Tracker Detail.
-
-\- \*\*`OnboardingStep.finalStep?: boolean`\*\* — marca o último passo. Ao entrar nele, o workflow já é considerado `completed` (eager-complete), hub é provisionado, alerta é emitido e triggers do finalStep disparam automaticamente.
 
 \- \*\*`WorkflowInstance.pendingAgenticFlow: PendingAgenticFlowItem[]`\*\* — itens agênticos pendentes de aprovação humana (populado em `buildInstance` a partir de `step.agentic`); a Home agrega via `flatMap` e renderiza no card "Fluxos agênticos pendentes aprovação".
 

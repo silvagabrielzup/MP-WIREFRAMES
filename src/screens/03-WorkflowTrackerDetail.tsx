@@ -7,7 +7,6 @@ import {
   Rocket,
   ArrowLeftRight,
   ShieldCheck,
-  Search,
   Settings,
   CheckCircle2,
   XCircle,
@@ -188,26 +187,6 @@ function nodeX(idx: number) {
   return NODE_PAD_X + idx * (NODE_W + NODE_GAP)
 }
 const NODE_Y = ROW_Y
-
-const verbsOrder: Verb[] = ['build', 'agentic', 'deploy', 'migration', 'rollout']
-
-type Phase = { verb: Verb; startIdx: number; endIdx: number; count: number }
-
-function computePhases(): Phase[] {
-  const out: Phase[] = []
-  steps.forEach((s, i) => {
-    const last = out[out.length - 1]
-    if (last && last.verb === s.verb) {
-      last.endIdx = i
-      last.count += 1
-    } else {
-      out.push({ verb: s.verb, startIdx: i, endIdx: i, count: 1 })
-    }
-  })
-  return out
-}
-
-const phases = computePhases()
 
 type TabKey = 'fluxo' | 'tools' | 'sensors' | 'audit' | 'replay' | 'cost'
 
@@ -512,69 +491,15 @@ function EdgeLayer({ selectedId }: { selectedId: string | null }) {
   )
 }
 
-function PhaseStrip({ onJump }: { onJump: (verb: Verb) => void }) {
-  const totalSpan = nodeX(steps.length - 1) + NODE_W - nodeX(0)
-  return (
-    <div className="relative h-9 w-full overflow-hidden rounded-md border border-border bg-[#101115]">
-      {phases.map((p) => {
-        const left = nodeX(p.startIdx) - nodeX(0)
-        const width = nodeX(p.endIdx) + NODE_W - nodeX(p.startIdx)
-        const meta = verbMeta[p.verb]
-        const Icon = meta.icon
-        return (
-          <button
-            key={p.verb + p.startIdx}
-            onClick={() => onJump(p.verb)}
-            style={{
-              left: `${(left / totalSpan) * 100}%`,
-              width: `${(width / totalSpan) * 100}%`,
-            }}
-            className={`absolute inset-y-0 flex items-center gap-1.5 border-r border-border/40 px-2 ${meta.bodyBg} hover:opacity-90`}
-          >
-            <span className={`flex h-4 w-4 items-center justify-center rounded ${meta.headerBg} text-black`}>
-              <Icon className="h-2.5 w-2.5" />
-            </span>
-            <span className={`text-[10.5px] font-semibold uppercase tracking-wider ${meta.text}`}>
-              {meta.label}
-            </span>
-            <span className="text-[10px] text-text-muted">· {p.count}</span>
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
-function Legend() {
-  return (
-    <div className="pointer-events-auto flex items-center gap-2 rounded-md border border-border bg-surface/90 px-2 py-1.5 backdrop-blur">
-      <span className="text-[10px] uppercase tracking-wider text-text-muted">verbos</span>
-      {verbsOrder.map((v) => {
-        const m = verbMeta[v]
-        return (
-          <span key={v} className="flex items-center gap-1">
-            <span className={`h-2 w-2 rounded-sm ${m.swatch}`} />
-            <span className={`text-[10.5px] font-semibold uppercase tracking-wider ${m.text}`}>
-              {m.label}
-            </span>
-          </span>
-        )
-      })}
-    </div>
-  )
-}
-
 function Canvas({
   selectedId,
   onSelect,
-  onJumpToVerb,
   approval,
   onApprove,
   onDecline,
 }: {
   selectedId: string | null
   onSelect: (id: string) => void
-  onJumpToVerb: (v: Verb) => void
   approval: ApprovalState
   onApprove: () => void
   onDecline: () => void
@@ -582,23 +507,6 @@ function Canvas({
   const failedStep = steps.find((s) => s.status === 'failed')
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <div className="relative w-full max-w-[320px]">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-text-muted" />
-          <input
-            type="text"
-            placeholder="buscar step, tool, sensor, verbo…"
-            className="h-8 w-full rounded-md border border-border bg-surface pl-7 pr-10 text-[11.5px] placeholder:text-text-muted focus:border-border-strong focus:outline-none"
-          />
-          <kbd className="absolute right-2 top-1/2 -translate-y-1/2 rounded border border-border bg-bg px-1 font-mono text-[9.5px] text-text-muted">
-            ⌘K
-          </kbd>
-        </div>
-        <div className="flex-1">
-          <PhaseStrip onJump={onJumpToVerb} />
-        </div>
-      </div>
-
       <div
         className="relative overflow-auto rounded-lg border border-border bg-[#0F1014]"
         style={{
@@ -655,9 +563,8 @@ function Canvas({
             </div>
           </div>
 
-          {/* Legend + Toolbar top-right */}
+          {/* Toolbar top-right */}
           <div className="pointer-events-auto flex flex-col items-end gap-1.5">
-            <Legend />
             <div className="flex items-center gap-1 rounded-md border border-border bg-surface/90 p-1 backdrop-blur">
               <button title="Zoom out" className="rounded p-1 text-text-secondary hover:bg-bg hover:text-text-primary">
                 <Minus className="h-3.5 w-3.5" />
@@ -1324,9 +1231,6 @@ export default function WorkflowTrackerDetail() {
           <Canvas
             selectedId={selectedId}
             onSelect={setSelectedId}
-            onJumpToVerb={() => {
-              /* in a wireframe; would pan canvas */
-            }}
             approval={approval}
             onApprove={handleApprove}
             onDecline={handleDecline}
