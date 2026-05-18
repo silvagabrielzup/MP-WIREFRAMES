@@ -1,7 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
 import {
   applicationHubs as applicationHubsSeed,
-  executionTemplateIds,
   workflows as workflowTemplates,
   type ApplicationHub,
   type WorkflowAsset,
@@ -153,11 +152,33 @@ type WorkflowsContextValue = {
   // ----- Façades sobre CRUD (mantidas pra retro-compat) -----
   addWorkflow: (templateOrAsset: string | WorkflowAsset) => Workflow | null
   advanceStep: (workflowId: string) => void
+  /**
+   * Marca um step específico (por `stepId`) como concluído, sem exigir que
+   * seja o step corrente. Usado pelo checklist de onboarding no Home, onde
+   * o usuário pode marcar steps fora de ordem via checkbox.
+   */
+  completeStep: (workflowId: string, stepId: string) => void
+  /**
+   * Inverso de `completeStep`: desmarca um step específico, retornando-o
+   * pra pendente. Usado quando o usuário desmarca o checkbox do step na TODO list.
+   */
+  uncompleteStep: (workflowId: string, stepId: string) => void
   advanceStatus: (workflowId: string, status: WorkflowStatus) => void
   resolveAgenticItem: (workflowId: string, stepId: string) => void
 }
 
 const WorkflowsContext = createContext<WorkflowsContextValue | null>(null)
+
+/**
+ * Templates cuja conclusão provisiona um `ApplicationHub`. Inclui o
+ * onboarding primário (`wf-migration-vanilla`) e a execução server-side da
+ * Migração Vanilla (`wf-onboarding-vanilla-exec`) — qualquer um dos dois
+ * concluindo cria o hub (dedup vale por `hub.id`).
+ */
+const HUB_PROVISIONING_TEMPLATE_IDS: Set<string> = new Set([
+  'wf-migration-vanilla',
+  'wf-onboarding-vanilla-exec',
+])
 
 // =============================================================================
 // Helpers
@@ -420,7 +441,7 @@ export function WorkflowsProvider({ children }: { children: ReactNode }) {
     if (trajectoryEnded) {
       const ended = trajectoryEnded as Workflow
       const template = findTemplateById(ended.slug)
-      if (template && !executionTemplateIds.has(template.id)) {
+      if (template && HUB_PROVISIONING_TEMPLATE_IDS.has(template.id)) {
         const hub = buildHubFromTemplate(template)
         setWorkflows((prev) =>
           prev.map((wf) =>
@@ -435,6 +456,114 @@ export function WorkflowsProvider({ children }: { children: ReactNode }) {
         )
       }
     }
+  }, [])
+
+  const completeStep = useCallback((workflowId: string, stepId: string) => {
+    let trajectoryEnded: Workflow | null = null
+
+    setWorkflows((prev) => {
+      const next = prev.map((wf) => {
+        if (wf.id !== workflowId) return wf
+        if (wf.status === 'completed' || wf.status === 'failed') return wf
+
+        const targetIdx = wf.steps.findIndex((s) => s.id === stepId)
+        if (targetIdx < 0) return wf
+        if (wf.steps[targetIdx].isCompleted) return wf
+
+        const now = new Date().toISOString()
+        const afterCompletion: WorkflowStep[] = wf.steps.map((s, i) => {
+          if (i === targetIdx) {
+            return {
+              ...s,
+              isCompleted: true,
+              status: 'done' as const,
+              completedAt: now,
+            }
+          }
+          return s
+        })
+
+        // Re-derive 'in-progress' so it always points at the first un-completed
+        // step. Necessary because steps can now be completed out of order.
+        const firstUnfinished = afterCompletion.findIndex((s) => !s.isCompleted)
+        const withProgress: WorkflowStep[] = afterCompletion.map((s, i) => {
+          if (s.isCompleted) return s
+          if (i === firstUnfinished) {
+            return {
+              ...s,
+              status: 'in-progress' as const,
+              startedAt: s.startedAt ?? now,
+            }
+          }
+          return { ...s, status: 'pending' as const }
+        })
+
+        const reconciled = reconcileLegacyFields({ ...wf, steps: withProgress })
+        if (reconciled.status === 'completed') trajectoryEnded = reconciled
+        return reconciled
+      })
+      return next
+    })
+
+    // Mirror de `advanceStep`: provisiona infraOnPlat + alerta ao concluir
+    // a trajetória completa do workflow primário.
+    if (trajectoryEnded) {
+      const ended = trajectoryEnded as Workflow
+      const template = findTemplateById(ended.slug)
+      if (template && HUB_PROVISIONING_TEMPLATE_IDS.has(template.id)) {
+        const hub = buildHubFromTemplate(template)
+        setWorkflows((prev) =>
+          prev.map((wf) =>
+            wf.id === ended.id && !wf.infraOnPlat.some((h) => h.id === hub.id)
+              ? { ...wf, infraOnPlat: [...wf.infraOnPlat, hub] }
+              : wf,
+          ),
+        )
+        const alert = buildAlertFromTemplate(template)
+        setAppHubAlerts((prev) =>
+          prev.some((a) => a.id === alert.id) ? prev : [...prev, alert],
+        )
+      }
+    }
+  }, [])
+
+  const uncompleteStep = useCallback((workflowId: string, stepId: string) => {
+    setWorkflows((prev) =>
+      prev.map((wf) => {
+        if (wf.id !== workflowId) return wf
+        const targetIdx = wf.steps.findIndex((s) => s.id === stepId)
+        if (targetIdx < 0) return wf
+        if (!wf.steps[targetIdx].isCompleted) return wf
+
+        const undone: WorkflowStep[] = wf.steps.map((s, i) => {
+          if (i === targetIdx) {
+            return {
+              ...s,
+              isCompleted: false,
+              status: 'pending' as const,
+              completedAt: undefined,
+            }
+          }
+          return s
+        })
+
+        // Re-derive 'in-progress' como primeiro não concluído.
+        const firstUnfinished = undone.findIndex((s) => !s.isCompleted)
+        const withProgress: WorkflowStep[] = undone.map((s, i) => {
+          if (s.isCompleted) return s
+          if (i === firstUnfinished) {
+            return {
+              ...s,
+              status: 'in-progress' as const,
+              startedAt: s.startedAt ?? new Date().toISOString(),
+            }
+          }
+          return { ...s, status: 'pending' as const }
+        })
+
+        return reconcileLegacyFields({ ...wf, steps: withProgress })
+      }),
+    )
   }, [])
 
   const advanceStatus = useCallback((workflowId: string, status: WorkflowStatus) => {
@@ -524,6 +653,8 @@ export function WorkflowsProvider({ children }: { children: ReactNode }) {
       appHubAlerts,
       addWorkflow,
       advanceStep,
+      completeStep,
+      uncompleteStep,
       advanceStatus,
       resolveAgenticItem,
     }),
@@ -537,6 +668,8 @@ export function WorkflowsProvider({ children }: { children: ReactNode }) {
       appHubAlerts,
       addWorkflow,
       advanceStep,
+      completeStep,
+      uncompleteStep,
       advanceStatus,
       resolveAgenticItem,
     ],

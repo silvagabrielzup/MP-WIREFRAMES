@@ -23,8 +23,6 @@ Layout:
 
 \- Coluna esquerda: "Fluxos agenticos pendentes aprovacao"
 
-&#x20; - Lista de 5 itens com nome do workflow, nome da ação que necessidade de aprovação
-
 \- Coluna direita: "Alertas da Aplication Hub"
 
 &#x20; - Aprovações pendentes (Komply)
