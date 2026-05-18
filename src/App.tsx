@@ -8,6 +8,7 @@ import ApplicationHub from './screens/04-ApplicationHub'
 import ApplicationHubDetail from './screens/05-ApplicationHubDetail'
 import AssetsCatalog from './screens/06-AssetsCatalog'
 import SaDetail from './screens/07-SaDetail'
+import Login from './screens/08-Login'
 import './index.css'
 
 export default function App() {
@@ -15,6 +16,7 @@ export default function App() {
     <WorkflowsProvider>
       <BrowserRouter basename={import.meta.env.BASE_URL}>
         <Routes>
+          <Route path="/login" element={<Login />} />
           <Route element={<Layout />}>
             <Route path="/" element={<Home />} />
             <Route path="/workflows" element={<WorkflowTrackerList />} />
