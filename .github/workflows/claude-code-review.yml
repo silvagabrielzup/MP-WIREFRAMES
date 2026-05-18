@@ -1,8 +1,15 @@
+<<<<<<< HEAD
+=======
+# Auto-review of pull requests by Claude Code.
+# Triggers on PR open + every push to the PR branch. The action reads the diff,
+# follows the conventions in CLAUDE.md, and posts review comments back to the PR.
+>>>>>>> 5b8843c5e3479bbc4642a3c84c07bfe5bc2edcad
 name: Claude Code Review
 
 on:
   pull_request:
     types: [opened, synchronize]
+<<<<<<< HEAD
     # Optional: Only run on specific file changes
     # paths:
     #   - "src/**/*.ts"
@@ -81,3 +88,45 @@ jobs:
           # if: |
           #   !contains(github.event.pull_request.title, '[skip-review]') &&
           #   !contains(github.event.pull_request.title, '[WIP]')
+=======
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
+jobs:
+  claude-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: '--model claude-sonnet-4-6'
+          prompt: |
+            Você é um revisor sênior do projeto Management Plane (wireframes do
+            portal interno do Itaú sobre a StackSpot). Siga as convenções do
+            CLAUDE.md na raiz do repo.
+
+            Foco da revisão:
+            - Dark theme only, Tailwind primitives (sem shadcn) e lucide-react
+              para ícones. Sinalize se a PR introduzir libs de UI ou de chart.
+            - Densidade alta, dados realistas em pt-BR. Mock data fica
+              centralizado em `src/data/database.ts` — não deve aparecer
+              inline em telas.
+            - Tipagem estrita (`noUnusedLocals`, `noUnusedParameters`,
+              `verbatimModuleSyntax`). Aponte imports/variáveis órfãos.
+            - Vocabulário do domínio: SA, ON-PLAT, 7 motores, 4 verbos da
+              Operação Vanilla, IUConfia. Não parafrasear na UI.
+            - Cada tela deve ser self-contained sob `src/screens/`. Layout
+              compartilhado vive em `src/components/Layout.tsx`.
+
+            Para cada problema relevante, comente inline na linha do diff com
+            sugestão de correção concreta. Termine com um resumo curto no
+            review-level comment cobrindo: o que está bom, riscos, e itens
+            opcionais de polish.
+>>>>>>> 5b8843c5e3479bbc4642a3c84c07bfe5bc2edcad
