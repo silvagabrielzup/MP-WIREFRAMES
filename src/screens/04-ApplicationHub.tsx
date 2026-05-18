@@ -4,9 +4,13 @@ import {
   ArrowRight,
   Search,
   Boxes,
+  Sparkles,
+  CheckCircle2,
 } from 'lucide-react'
 import { type ApplicationHub, type ApplicationHubHealth } from '../data/database'
 import { useWorkflows } from '../contexts/WorkflowsProvider'
+
+const MIGRATION_EXECUTION_TEMPLATE_ID = 'wf-onboarding-vanilla-exec'
 
 const healthMeta: Record<
   ApplicationHubHealth,
@@ -97,7 +101,22 @@ function Stat({
 }
 
 export default function ApplicationHub() {
-  const { applicationHubs } = useWorkflows()
+  const { applicationHubs, workflows } = useWorkflows()
+
+  // SAs recém-migrados: workflow de execução `wf-onboarding-vanilla-exec`
+  // concluído → hub provisionado pelo provider.
+  const recentlyMigratedSAs = new Set(
+    workflows
+      .filter(
+        (w) =>
+          w.templateId === MIGRATION_EXECUTION_TEMPLATE_ID && w.status === 'completed',
+      )
+      .map((w) => {
+        const saInput = w.name.match(/ssa-[a-z0-9-]+/i)
+        return saInput ? saInput[0] : 'ssa-pix-core'
+      }),
+  )
+
   return (
     <div className="space-y-6">
       <header className="space-y-2">
@@ -140,6 +159,32 @@ export default function ApplicationHub() {
         </section>
       ) : (
         <>
+          {recentlyMigratedSAs.size > 0 && (
+            <div className="flex items-start gap-3 rounded-lg border border-success/30 bg-success/[0.08] px-4 py-3">
+              <span className="mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-md bg-success/15 text-success">
+                <CheckCircle2 className="h-4 w-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[13px] font-medium text-text-primary">
+                  {recentlyMigratedSAs.size === 1
+                    ? 'Aplicação migrada para a StackSpot'
+                    : `${recentlyMigratedSAs.size} aplicações migradas para a StackSpot`}
+                </div>
+                <div className="mt-0.5 text-[11.5px] text-text-secondary">
+                  {[...recentlyMigratedSAs].map((sa) => (
+                    <span
+                      key={sa}
+                      className="mr-1.5 inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2 py-0.5 font-mono text-[10.5px] text-success"
+                    >
+                      <Sparkles className="h-2.5 w-2.5" />
+                      {sa}
+                    </span>
+                  ))}
+                  <span>· agora visível na lista abaixo.</span>
+                </div>
+              </div>
+            </div>
+          )}
           <StatRow apps={applicationHubs} />
 
           <section>
@@ -181,6 +226,12 @@ export default function ApplicationHub() {
                           {a.onPlat && (
                             <span className="rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-accent">
                               on-plat
+                            </span>
+                          )}
+                          {recentlyMigratedSAs.has(a.sa) && (
+                            <span className="inline-flex items-center gap-1 rounded border border-success/30 bg-success/10 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-success">
+                              <Sparkles className="h-2.5 w-2.5" />
+                              recém-migrada
                             </span>
                           )}
                         </div>

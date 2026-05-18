@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowRight,
@@ -6,48 +6,50 @@ import {
   CheckCircle2,
   AlertTriangle,
   Clock3,
-  Loader2,
-  MoreHorizontal,
   Check,
+  Copy,
   Sparkles,
   Boxes,
-  X,
-  Search,
-  GitBranch,
-  FileCode2,
   FileText,
-  Folder,
-  FolderOpen,
-  ChevronRight,
-  ChevronDown,
-  Plus,
-  Minus,
-  ArrowRightLeft,
-  Activity,
-  Lock,
-  Server,
-  Code2,
-  Database,
-  Settings as SettingsIcon,
-  Wrench,
   PartyPopper,
   LayoutGrid,
   Trophy,
+  Info,
+  XCircle,
+  Loader2,
+  ChevronDown,
+  ChevronRight,
+  Search,
+  KeyRound,
+  ListChecks,
+  Activity,
+  Download,
+  Zap,
+  Repeat,
+  GitBranch,
+  Layers,
+  PlugZap,
+  CloudOff,
+  Terminal,
+  Folder,
+  FolderOpen,
+  FileCode2,
+  Plus,
+  Minus,
+  ArrowRightLeft,
+  Code2,
+  Wrench,
+  Server,
+  Database,
+  Settings as SettingsIcon,
+  Lock,
 } from 'lucide-react'
-import { useWorkflows } from '../contexts/WorkflowsProvider'
-import { executionTemplateIds, workflows as workflowTemplates } from '../data/database'
-
-type StepStatus = 'done' | 'in-progress' | 'not-started'
-
-type OnboardingStep = {
-  id: number
-  stepId: string
-  title: string
-  description: string
-  ctaLabel: string
-  completedOnClick: boolean
-  status: StepStatus
-}
+import { useWorkflows, type Workflow } from '../contexts/WorkflowsProvider'
+import {
+  executionTemplateIds,
+  migrationExecutionWorkflow,
+  workflows as workflowTemplates,
+} from '../data/database'
 
 function EmptyState({
   icon: Icon,
@@ -69,105 +71,66 @@ function EmptyState({
   )
 }
 
-function StepCheckbox({ status }: { status: StepStatus }) {
-  if (status === 'done') {
-    return (
-      <span className="flex h-6 w-6 flex-none items-center justify-center rounded-full border border-success/40 bg-success/10">
-        <Check className="h-3.5 w-3.5 text-success" />
-      </span>
-    )
-  }
-  if (status === 'in-progress') {
-    return (
-      <span className="flex h-6 w-6 flex-none items-center justify-center rounded-full border border-accent bg-accent/10">
-        <Loader2 className="h-3.5 w-3.5 animate-spin text-accent" />
-      </span>
-    )
-  }
-  return <span className="h-6 w-6 flex-none rounded-full border border-border bg-bg" />
+type ChecklistStep = {
+  id: string
+  /** stepId no template `wf-migration-vanilla` — marca esse step quando o
+   *  usuário clica no checkbox. */
+  stepId: string
+  icon: typeof KeyRound
+  title: string
+  description: string
 }
 
-function OnboardingStepRow({
-  step,
-  attenuated,
-  onActivate,
-}: {
-  step: OnboardingStep
-  attenuated: boolean
-  onActivate: (step: OnboardingStep) => void
-}) {
-  const isDone = step.status === 'done'
-  const isInProgress = step.status === 'in-progress'
+const CHECKLIST_STEPS: ChecklistStep[] = [
+  {
+    id: 'install-cli',
+    stepId: 'step-01-install-cli',
+    icon: Download,
+    title: 'Instalação de CLI',
+    description: 'Baixar e instalar a CLI do StackSpot no terminal local.',
+  },
+  {
+    id: 'login',
+    stepId: 'step-02-permission-cloud',
+    icon: KeyRound,
+    title: 'Login',
+    description: 'Autenticar na CLI do StackSpot com SSO Itaú.',
+  },
+  {
+    id: 'select-sa',
+    stepId: 'step-03-select-repos',
+    icon: Search,
+    title: 'Seleção de SA',
+    description: 'Escolher SA + repos da família que viram mono-repo Vanilla.',
+  },
+  {
+    id: 'check-viability',
+    stepId: 'step-04-configure-workflow',
+    icon: ListChecks,
+    title: 'Checar viabilidade',
+    description: 'Rodar o pre-flight check antes de iniciar.',
+  },
+  {
+    id: 'track-status',
+    stepId: 'step-06-validate-dev',
+    icon: Activity,
+    title: 'Acompanhar Status da Migration',
+    description: 'Disparar e monitorar o workflow Vanilla em tempo real.',
+  },
+]
 
-  if (isDone) {
-    return (
-      <li className="flex items-center gap-3 border-b border-border px-4 py-2.5 opacity-60 last:border-b-0">
-        <StepCheckbox status="done" />
-        <span className="flex-1 truncate text-[12.5px] text-text-muted line-through">
-          {step.title}
-        </span>
-      </li>
-    )
-  }
+const MIGRATION_TEMPLATE_ID = 'wf-migration-vanilla'
 
-  const canComplete = isInProgress && step.completedOnClick
-  const handleActivate = () => onActivate(step)
-
-  return (
-    <li
-      onClick={handleActivate}
-      className={`flex cursor-pointer items-start gap-3 border-b border-border px-4 py-3 last:border-b-0 hover:bg-[#181A1F] ${
-        isInProgress ? 'border-l-2 border-l-accent bg-accent/5' : ''
-      } ${attenuated ? 'opacity-80' : ''}`}
-    >
-      <StepCheckbox status={step.status} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="truncate text-[12.5px] font-medium text-text-primary">{step.title}</span>
-          {isInProgress && (
-            <span className="flex-none rounded border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-accent">
-              em curso
-            </span>
-          )}
-        </div>
-        <div className="mt-0.5 truncate text-[11.5px] text-text-muted">{step.description}</div>
-      </div>
-      <div className="flex flex-none items-center gap-3">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            handleActivate()
-          }}
-          className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11.5px] font-medium transition ${
-            canComplete
-              ? 'border-accent/40 bg-accent/10 text-accent hover:bg-accent/20'
-              : 'border-border bg-bg text-text-secondary hover:border-border-strong hover:text-text-primary'
-          }`}
-        >
-          {step.ctaLabel}
-          <ArrowRight className="h-3 w-3" />
-        </button>
-        <button
-          type="button"
-          aria-label="opções"
-          title="dispensar · marcar como feito · lembrar depois"
-          onClick={(e) => e.stopPropagation()}
-          className="flex h-6 w-6 items-center justify-center rounded text-text-muted hover:bg-bg hover:text-text-primary"
-        >
-          <MoreHorizontal className="h-3.5 w-3.5" />
-        </button>
-      </div>
-    </li>
-  )
-}
+const MOCK_SAS = [
+  { id: 'ssa-pix-core', name: 'Pix Core', squad: 'squad-pix' },
+  { id: 'ssa-conta-corrente', name: 'Conta Corrente', squad: 'squad-cc' },
+  { id: 'ssa-investimentos', name: 'Investimentos', squad: 'squad-invest' },
+  { id: 'ssa-cartoes', name: 'Cartões', squad: 'squad-cartoes' },
+]
 
 type RepoKind = 'code' | 'ci-cd' | 'infra' | 'db' | 'config'
 
-const REPO_KIND_META: Record<
-  RepoKind,
-  { label: string; tone: string }
-> = {
+const REPO_KIND_META: Record<RepoKind, { label: string; tone: string }> = {
   'code': { label: 'código', tone: 'border-info/30 bg-info/10 text-info' },
   'ci-cd': { label: 'ci/cd', tone: 'border-accent/30 bg-accent/10 text-accent' },
   'infra': { label: 'infra', tone: 'border-warning/30 bg-warning/10 text-warning' },
@@ -175,59 +138,28 @@ const REPO_KIND_META: Record<
   'config': { label: 'config', tone: 'border-border bg-bg text-text-secondary' },
 }
 
+const REPO_KIND_ICONS: Record<RepoKind, typeof Code2> = {
+  'code': Code2,
+  'ci-cd': Wrench,
+  'infra': Server,
+  'db': Database,
+  'config': SettingsIcon,
+}
+
 type ServiceRepo = {
   name: string
   kind: RepoKind
   stack: string
   size: string
-  lastCommit: string
 }
 
-const MOCK_SERVICE = {
-  sa: 'ssa-pix-core',
-  name: 'Pix Core',
-  description:
-    'Serviço de pagamentos instantâneos Pix — gestão de chaves, transações, idempotência e webhooks.',
-  squad: 'squad-pix',
-  org: 'itau-applications',
-  repos: [
-    {
-      name: 'pix-core',
-      kind: 'code' as RepoKind,
-      stack: 'Java 17 · Spring Boot 3.2',
-      size: '184 MB · 2.418 arquivos',
-      lastCommit: 'há 2h · feat(payment): retry com backoff exponencial',
-    },
-    {
-      name: 'pix-core-pipeline',
-      kind: 'ci-cd' as RepoKind,
-      stack: 'Groovy · Jenkins shared lib',
-      size: '4.2 MB · 38 arquivos',
-      lastCommit: 'há 1d · chore: bump jenkins-shared-library v4.2',
-    },
-    {
-      name: 'pix-core-infra',
-      kind: 'infra' as RepoKind,
-      stack: 'Terraform 1.5 · AWS modules',
-      size: '18 MB · 142 arquivos',
-      lastCommit: 'há 3d · feat(network): private endpoint pra Aurora',
-    },
-    {
-      name: 'pix-core-db',
-      kind: 'db' as RepoKind,
-      stack: 'Liquibase · SQL Aurora',
-      size: '2.8 MB · 96 arquivos',
-      lastCommit: 'há 5d · feat: índice composto em transacao_idem',
-    },
-    {
-      name: 'pix-core-config',
-      kind: 'config' as RepoKind,
-      stack: 'YAML · K8s manifests',
-      size: '780 KB · 24 arquivos',
-      lastCommit: 'há 6h · chore: refresh config map pra hml',
-    },
-  ] satisfies ServiceRepo[],
-}
+const MOCK_SA_REPOS: ServiceRepo[] = [
+  { name: 'pix-core', kind: 'code', stack: 'Java 17 · Spring Boot 3.2', size: '184 MB · 2.418 arquivos' },
+  { name: 'pix-core-pipeline', kind: 'ci-cd', stack: 'Groovy · Jenkins shared lib', size: '4.2 MB · 38 arquivos' },
+  { name: 'pix-core-infra', kind: 'infra', stack: 'Terraform 1.5 · AWS modules', size: '18 MB · 142 arquivos' },
+  { name: 'pix-core-db', kind: 'db', stack: 'Liquibase · SQL Aurora', size: '2.8 MB · 96 arquivos' },
+  { name: 'pix-core-config', kind: 'config', stack: 'YAML · K8s manifests', size: '780 KB · 24 arquivos' },
+]
 
 type TreeAction = 'moved' | 'added' | 'removed'
 type TreeNode = {
@@ -244,123 +176,39 @@ const BEFORE_TREES: TreeNode[] = [
     type: 'dir',
     defaultOpen: true,
     children: [
-      {
-        name: 'src',
-        type: 'dir',
-        defaultOpen: true,
-        children: [
-          {
-            name: 'main',
-            type: 'dir',
-            children: [
-              {
-                name: 'java',
-                type: 'dir',
-                children: [
-                  {
-                    name: 'com.itau.pix',
-                    type: 'dir',
-                    children: [
-                      { name: 'Application.java', type: 'file' },
-                      { name: 'PaymentService.java', type: 'file' },
-                      { name: 'PixController.java', type: 'file' },
-                    ],
-                  },
-                ],
-              },
-              {
-                name: 'resources',
-                type: 'dir',
-                children: [
-                  { name: 'application.yaml', type: 'file' },
-                  { name: 'logback.xml', type: 'file' },
-                ],
-              },
-            ],
-          },
-          { name: 'test', type: 'dir', children: [{ name: 'java', type: 'dir' }] },
-        ],
-      },
+      { name: 'src/', type: 'dir', children: [{ name: 'main', type: 'dir' }, { name: 'test', type: 'dir' }] },
       { name: 'pom.xml', type: 'file' },
       { name: 'Dockerfile', type: 'file' },
-      { name: 'README.md', type: 'file' },
     ],
   },
   {
     name: 'pix-core-pipeline',
     type: 'dir',
-    defaultOpen: true,
     children: [
       { name: 'Jenkinsfile', type: 'file' },
-      {
-        name: 'shared',
-        type: 'dir',
-        children: [
-          { name: 'build.groovy', type: 'file' },
-          { name: 'deploy.groovy', type: 'file' },
-          { name: 'rollback.groovy', type: 'file' },
-        ],
-      },
-      { name: 'README.md', type: 'file' },
+      { name: 'shared/', type: 'dir' },
     ],
   },
   {
     name: 'pix-core-infra',
     type: 'dir',
     children: [
-      {
-        name: 'modules',
-        type: 'dir',
-        children: [
-          { name: 'eks', type: 'dir' },
-          { name: 'aurora', type: 'dir' },
-          { name: 'msk', type: 'dir' },
-        ],
-      },
-      {
-        name: 'envs',
-        type: 'dir',
-        children: [
-          { name: 'dev', type: 'dir' },
-          { name: 'hml', type: 'dir' },
-          { name: 'prod', type: 'dir' },
-        ],
-      },
+      { name: 'modules/', type: 'dir' },
+      { name: 'envs/', type: 'dir' },
     ],
   },
   {
     name: 'pix-core-db',
     type: 'dir',
     children: [
-      {
-        name: 'changelog',
-        type: 'dir',
-        children: [{ name: 'db.changelog-master.xml', type: 'file' }],
-      },
-      {
-        name: 'migrations',
-        type: 'dir',
-        children: [
-          { name: '001-create-transacao.sql', type: 'file' },
-          { name: '002-add-idem-key.sql', type: 'file' },
-        ],
-      },
+      { name: 'changelog/', type: 'dir' },
+      { name: 'migrations/', type: 'dir' },
     ],
   },
   {
     name: 'pix-core-config',
     type: 'dir',
-    children: [
-      {
-        name: 'k8s',
-        type: 'dir',
-        children: [
-          { name: 'dev.yaml', type: 'file' },
-          { name: 'hml.yaml', type: 'file' },
-          { name: 'prod.yaml', type: 'file' },
-        ],
-      },
-    ],
+    children: [{ name: 'k8s/', type: 'dir' }],
   },
 ]
 
@@ -380,190 +228,22 @@ const AFTER_TREE: TreeNode = {
           defaultOpen: true,
           action: 'added',
           children: [
-            {
-              name: 'src',
-              type: 'dir',
-              action: 'moved',
-              children: [
-                {
-                  name: 'main',
-                  type: 'dir',
-                  children: [
-                    {
-                      name: 'java',
-                      type: 'dir',
-                      children: [
-                        {
-                          name: 'com.itau.pix',
-                          type: 'dir',
-                          children: [
-                            { name: 'Application.java', type: 'file' },
-                            { name: 'PaymentService.java', type: 'file' },
-                            { name: 'PixController.java', type: 'file' },
-                          ],
-                        },
-                      ],
-                    },
-                    {
-                      name: 'resources',
-                      type: 'dir',
-                      children: [
-                        { name: 'application.yaml', type: 'file' },
-                        { name: 'logback.xml', type: 'file' },
-                      ],
-                    },
-                  ],
-                },
-                { name: 'test', type: 'dir', children: [{ name: 'java', type: 'dir' }] },
-              ],
-            },
+            { name: 'src/', type: 'dir', action: 'moved' },
             { name: 'pom.xml', type: 'file', action: 'moved' },
             { name: 'Dockerfile', type: 'file', action: 'moved' },
-            {
-              name: 'ci',
-              type: 'dir',
-              action: 'moved',
-              children: [
-                { name: 'kaptain.yaml', type: 'file', action: 'added' },
-                {
-                  name: 'steps',
-                  type: 'dir',
-                  children: [
-                    { name: 'build.groovy', type: 'file' },
-                    { name: 'deploy.groovy', type: 'file' },
-                    { name: 'rollback.groovy', type: 'file' },
-                  ],
-                },
-              ],
-            },
-            {
-              name: 'infra',
-              type: 'dir',
-              action: 'moved',
-              children: [
-                {
-                  name: 'modules',
-                  type: 'dir',
-                  children: [
-                    { name: 'eks', type: 'dir' },
-                    { name: 'aurora', type: 'dir' },
-                    { name: 'msk', type: 'dir' },
-                  ],
-                },
-                {
-                  name: 'envs',
-                  type: 'dir',
-                  children: [
-                    { name: 'dev', type: 'dir' },
-                    { name: 'hml', type: 'dir' },
-                    { name: 'prod', type: 'dir' },
-                  ],
-                },
-              ],
-            },
-            {
-              name: 'db',
-              type: 'dir',
-              action: 'moved',
-              children: [
-                {
-                  name: 'changelog',
-                  type: 'dir',
-                  children: [{ name: 'db.changelog-master.xml', type: 'file' }],
-                },
-                {
-                  name: 'migrations',
-                  type: 'dir',
-                  children: [
-                    { name: '001-create-transacao.sql', type: 'file' },
-                    { name: '002-add-idem-key.sql', type: 'file' },
-                  ],
-                },
-              ],
-            },
-            {
-              name: 'config',
-              type: 'dir',
-              action: 'moved',
-              children: [
-                { name: 'dev.yaml', type: 'file' },
-                { name: 'hml.yaml', type: 'file' },
-                { name: 'prod.yaml', type: 'file' },
-              ],
-            },
+            { name: 'ci/', type: 'dir', action: 'moved' },
+            { name: 'infra/', type: 'dir', action: 'moved' },
+            { name: 'db/', type: 'dir', action: 'moved' },
+            { name: 'config/', type: 'dir', action: 'moved' },
+            { name: 'kaptain.yaml', type: 'file', action: 'added' },
             { name: 'komply.yaml', type: 'file', action: 'added' },
-            { name: 'orkestra.yaml', type: 'file', action: 'added' },
           ],
         },
       ],
     },
-    {
-      name: 'tooling',
-      type: 'dir',
-      defaultOpen: true,
-      action: 'added',
-      children: [{ name: 'vanilla.lock', type: 'file', action: 'added' }],
-    },
+    { name: 'tooling/', type: 'dir', action: 'added' },
   ],
 }
-
-type TechDebtItem = {
-  icon: 'GitBranch' | 'Lock' | 'AlertTriangle' | 'Server' | 'Activity' | 'ShieldCheck'
-  title: string
-  impact: string
-  resolution: string
-}
-
-const TECH_DEBT: TechDebtItem[] = [
-  {
-    icon: 'GitBranch',
-    title: 'Pipeline Jenkins free-form',
-    impact:
-      'Pipeline declarado via DSL Groovy livre, sem audit trail estruturado; difícil de versionar e replicar entre SAs.',
-    resolution:
-      'Substituído por Kaptain declarativo em YAML, com snapshot de cada execução e SLO observado.',
-  },
-  {
-    icon: 'Lock',
-    title: 'Secrets versionados em repo de config',
-    impact:
-      'Strings base64 de credenciais HML/PROD commitadas em k8s/*.yaml — viola Komply data-classification.',
-    resolution:
-      'Migrado pra Vault-backed via SecretProviderClass; Komply bloqueia commits com `kind: Secret` literal.',
-  },
-  {
-    icon: 'AlertTriangle',
-    title: 'Auto-rollback ausente em deploy',
-    impact:
-      'Rollback de prod só manual via approval Jenkins. MTTR médio 23min nos últimos 90d.',
-    resolution:
-      'Traffik observa p99/erro contra SLO; rollback automático se janela de 5min viola threshold.',
-  },
-  {
-    icon: 'Server',
-    title: 'Imagens base sem scan de CVE',
-    impact:
-      'Dockerfile usa `openjdk:8` plano; última build trouxe 14 CVEs HIGH não tratadas.',
-    resolution:
-      'Komply força imagem base aprovada (`itau-jdk-21:lts`) + scan obrigatório no Konstructor.',
-  },
-  {
-    icon: 'Activity',
-    title: 'Sem dashboards padronizados',
-    impact:
-      'Cada SA monta seu Datadog dashboard; comparar saúde entre apps é impossível.',
-    resolution:
-      'Orkestra injeta dashboards padrão (p99, erro %, saturação CPU/mem) na primeira subida.',
-  },
-  {
-    icon: 'ShieldCheck',
-    title: 'Versionamento de schema manual',
-    impact:
-      'Equipe roda `psql` em prod via bastion; auditoria precária e drift HML/PROD.',
-    resolution:
-      'Liquibase no motor de Migration; cada PR de DB gera changeset versionado aplicado via dual-write.',
-  },
-]
 
 const ACTION_LABEL: Record<TreeAction, string> = {
   moved: 'mov',
@@ -571,10 +251,117 @@ const ACTION_LABEL: Record<TreeAction, string> = {
   removed: 'remov',
 }
 
+type TechDebtItem = {
+  icon: typeof GitBranch
+  title: string
+  impact: string
+  resolution: string
+}
+
+const TECH_DEBT: TechDebtItem[] = [
+  {
+    icon: GitBranch,
+    title: 'Pipeline Jenkins free-form',
+    impact: 'DSL Groovy livre, sem audit trail; difícil de versionar e replicar entre SAs.',
+    resolution: 'Kaptain declarativo em YAML, snapshot por execução e SLO observado.',
+  },
+  {
+    icon: Lock,
+    title: 'Secrets versionados em repo de config',
+    impact: 'Credenciais HML/PROD em base64 nos k8s/*.yaml — viola data-classification.',
+    resolution: 'Vault-backed via SecretProviderClass; Komply bloqueia `kind: Secret` literal.',
+  },
+  {
+    icon: AlertTriangle,
+    title: 'Auto-rollback ausente em deploy',
+    impact: 'Rollback de prod só manual via approval Jenkins. MTTR médio 23min nos últimos 90d.',
+    resolution: 'Traffik observa p99/erro contra SLO; rollback automático se viola threshold por 5min.',
+  },
+  {
+    icon: Server,
+    title: 'Imagens base sem scan de CVE',
+    impact: 'Dockerfile usa `openjdk:8` plano; última build trouxe 14 CVEs HIGH não tratadas.',
+    resolution: 'Komply força base aprovada (`itau-jdk-21:lts`) + scan obrigatório no Konstructor.',
+  },
+  {
+    icon: Activity,
+    title: 'Sem dashboards padronizados',
+    impact: 'Cada SA monta seu Datadog dashboard; comparar saúde entre apps é impossível.',
+    resolution: 'Orkestra injeta dashboards padrão (p99, erro %, sat CPU/mem) na primeira subida.',
+  },
+  {
+    icon: ShieldCheck,
+    title: 'Versionamento de schema manual',
+    impact: 'Equipe roda `psql` em prod via bastion; auditoria precária e drift HML/PROD.',
+    resolution: 'Liquibase no motor de Migration; cada PR de DB vira changeset versionado.',
+  },
+]
+
+const CLI_ADVANTAGES: { icon: typeof Zap; title: string; detail: string }[] = [
+  { icon: Zap, title: 'Automação', detail: 'Roda em scripts, CI/CD e githooks; não depende de cliques.' },
+  { icon: Repeat, title: 'Reprodutibilidade', detail: 'Mesmo comando, mesmo resultado. Idempotente por design.' },
+  { icon: GitBranch, title: 'Versionável', detail: 'Fluxos viram código: commit, code review, rollback no git.' },
+  { icon: Activity, title: 'Velocidade', detail: 'Execução direta, sem context-switch pra browser nem load de tela.' },
+  { icon: Layers, title: 'Composável', detail: 'Pipe com jq, grep, xargs; integra com qualquer toolchain existente.' },
+  { icon: CloudOff, title: 'Offline-friendly', detail: 'Auth cacheada localmente; trabalha sem rede em comandos read-only.' },
+  { icon: PlugZap, title: 'Power-user', detail: 'Flags como --watch, --json, --dry-run reduzem fricção pra avançados.' },
+]
+
+const VIABILITY_CHECKS = [
+  { id: 'komply', label: 'Komply · policies', status: 'ok' as const, detail: '0 violações críticas' },
+  { id: 'kaptain', label: 'Kaptain · CD/AWS', status: 'ok' as const, detail: 'role itau-deploy permitida' },
+  { id: 'pantheon', label: 'Pantheon · Kafka', status: 'warn' as const, detail: 'topic já existe em outro cluster' },
+  { id: 'orkestra', label: 'Orkestra · K8s', status: 'ok' as const, detail: 'namespace ssa-pix-core disponível' },
+  { id: 'traffik', label: 'Traffik · routing', status: 'ok' as const, detail: 'DNS livre' },
+  { id: 'migration', label: 'Migration · dados', status: 'ok' as const, detail: 'Aurora reachable' },
+]
+
+
+function CommandCopyButton({ command }: { command: string }) {
+  const [copied, setCopied] = useState(false)
+  const handleClick = () => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(command).catch(() => {})
+    }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      aria-label={copied ? 'Comando copiado' : 'Copiar comando'}
+      title={copied ? 'Copiado!' : 'Copiar comando'}
+      className={`flex h-8 flex-none items-center gap-1.5 rounded-md border px-2.5 text-[11px] font-medium transition ${
+        copied
+          ? 'border-success/40 bg-success/10 text-success'
+          : 'border-border bg-bg text-text-secondary hover:border-border-strong hover:text-text-primary'
+      }`}
+    >
+      {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+      <span className="hidden sm:inline">{copied ? 'Copiado!' : 'Copiar'}</span>
+    </button>
+  )
+}
+
+function CommandBlock({ command }: { command: string }) {
+  return (
+    <div className="flex items-stretch gap-2">
+      <code
+        tabIndex={0}
+        className="flex-1 overflow-x-auto whitespace-nowrap rounded-md border border-border bg-surface-2 px-3 py-1.5 font-mono text-[11.5px] text-text-primary focus:outline-none focus:ring-1 focus:ring-accent/40"
+      >
+        {command}
+      </code>
+      <CommandCopyButton command={command} />
+    </div>
+  )
+}
+
 function TreeNodeView({ node, depth = 0 }: { node: TreeNode; depth?: number }) {
   const [open, setOpen] = useState(node.defaultOpen ?? false)
   const isDir = node.type === 'dir'
-  const indent = depth * 14 + 6
+  const indent = depth * 12 + 4
 
   const rowTone =
     node.action === 'added'
@@ -608,7 +395,7 @@ function TreeNodeView({ node, depth = 0 }: { node: TreeNode; depth?: number }) {
         aria-expanded={isDir ? open : undefined}
         onClick={isDir ? () => setOpen((v) => !v) : undefined}
         style={{ paddingLeft: `${indent}px` }}
-        className={`flex items-center gap-1.5 rounded border py-0.5 pr-1.5 font-mono text-[11px] ${
+        className={`flex items-center gap-1 rounded border py-0.5 pr-1 font-mono text-[10.5px] ${
           isDir ? 'cursor-pointer' : 'cursor-default'
         } ${rowTone}`}
       >
@@ -623,20 +410,17 @@ function TreeNodeView({ node, depth = 0 }: { node: TreeNode; depth?: number }) {
         )}
         {isDir ? (
           open ? (
-            <FolderOpen className="h-3.5 w-3.5 flex-none text-accent" />
+            <FolderOpen className="h-3 w-3 flex-none text-accent" />
           ) : (
-            <Folder className="h-3.5 w-3.5 flex-none text-text-secondary" />
+            <Folder className="h-3 w-3 flex-none text-text-secondary" />
           )
         ) : (
           <FileCode2 className="h-3 w-3 flex-none text-text-muted" />
         )}
-        <span className={`flex-1 truncate ${nameTone}`}>
-          {node.name}
-          {isDir ? '/' : ''}
-        </span>
+        <span className={`flex-1 truncate ${nameTone}`}>{node.name}</span>
         {node.action && (
           <span
-            className={`flex-none rounded px-1 text-[9.5px] font-medium uppercase tracking-wider ${badgeTone}`}
+            className={`flex-none rounded px-1 text-[9px] font-medium uppercase tracking-wider ${badgeTone}`}
           >
             {ACTION_LABEL[node.action]}
           </span>
@@ -649,359 +433,569 @@ function TreeNodeView({ node, depth = 0 }: { node: TreeNode; depth?: number }) {
   )
 }
 
-type ModalStep = 1 | 2 | 3
-
-const STEP_LABELS: Record<ModalStep, string> = {
-  1: 'Buscar Serviço',
-  2: 'Estrutura mono-repo',
-  3: 'Débitos técnicos resolvidos',
+function CliInstallDetails() {
+  return (
+    <div className="space-y-3">
+      <div className="rounded-md border border-accent/30 bg-accent/[0.04] p-3">
+        <div className="mb-2 flex items-center gap-2">
+          <Terminal className="h-3.5 w-3.5 text-accent" />
+          <h4 className="text-[12px] font-semibold tracking-tight text-text-primary">
+            Por que CLI?
+          </h4>
+        </div>
+        <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+          {CLI_ADVANTAGES.map((adv) => {
+            const Icon = adv.icon
+            return (
+              <li
+                key={adv.title}
+                className="flex items-start gap-2 rounded border border-border bg-bg p-2"
+              >
+                <span className="mt-0.5 flex h-5 w-5 flex-none items-center justify-center rounded bg-accent/15 text-accent">
+                  <Icon className="h-3 w-3" />
+                </span>
+                <div className="min-w-0">
+                  <div className="text-[11.5px] font-medium text-text-primary">{adv.title}</div>
+                  <div className="text-[10.5px] text-text-muted">{adv.detail}</div>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      </div>
+      <CommandBlock command="curl -fsSL https://stackspot.itau/install.sh | sh" />
+      <div className="flex items-center gap-2 text-[11px]">
+        <span className="rounded-full border border-border bg-bg px-2 py-0.5 font-mono text-text-muted">
+          Versão recomendada: v1.4.2
+        </span>
+        <a
+          href="https://stackspot.itau/releases"
+          rel="noreferrer noopener"
+          target="_blank"
+          className="inline-flex items-center gap-1 text-[11.5px] font-medium text-accent hover:underline"
+        >
+          Ver release notes
+          <ArrowRight className="h-3 w-3" />
+        </a>
+      </div>
+    </div>
+  )
 }
 
-const TECH_DEBT_ICONS = {
-  GitBranch,
-  Lock,
-  AlertTriangle,
-  Server,
-  Activity,
-  ShieldCheck,
-} as const
-
-const REPO_KIND_ICONS: Record<RepoKind, typeof Code2> = {
-  'code': Code2,
-  'ci-cd': Wrench,
-  'infra': Server,
-  'db': Database,
-  'config': SettingsIcon,
+function LoginDetails() {
+  return (
+    <div className="space-y-2.5">
+      <div className="text-[11.5px] text-text-secondary">
+        Abre o fluxo OAuth no navegador e grava o token local em{' '}
+        <code className="rounded bg-bg px-1 font-mono text-[10.5px] text-accent">~/.stackspot/token</code>.
+      </div>
+      <CommandBlock command="stackspot auth login --realm itau" />
+      <div className="flex items-center gap-2 text-[11px]">
+        <span className="rounded-full border border-border bg-bg px-2 py-0.5 font-mono text-text-muted">
+          Sessão atual: não autenticado
+        </span>
+        <a
+          href="https://sso.itau.com.br/oauth/authorize"
+          rel="noreferrer noopener"
+          target="_blank"
+          className="inline-flex items-center gap-1 text-[11.5px] font-medium text-accent hover:underline"
+        >
+          Abrir SSO
+          <ArrowRight className="h-3 w-3" />
+        </a>
+      </div>
+    </div>
+  )
 }
 
-function RepoPickerModal({
-  open,
-  onClose,
-  onConfirm,
-}: {
-  open: boolean
-  onClose: () => void
-  onConfirm: () => void
-}) {
-  const [step, setStep] = useState<ModalStep>(1)
-  const [serviceQuery, setServiceQuery] = useState(MOCK_SERVICE.sa)
-  const [searched, setSearched] = useState(false)
+function SelectSaDetails() {
+  const [query, setQuery] = useState('')
+  const [selectedSa, setSelectedSa] = useState<string>('ssa-pix-core')
+  const [selectedRepos, setSelectedRepos] = useState<Set<string>>(
+    () => new Set(MOCK_SA_REPOS.map((r) => r.name)),
+  )
 
-  if (!open) return null
+  const filtered = MOCK_SAS.filter(
+    (s) =>
+      s.id.toLowerCase().includes(query.toLowerCase()) ||
+      s.name.toLowerCase().includes(query.toLowerCase()),
+  )
 
-  const reset = () => {
-    setStep(1)
-    setSearched(false)
-    setServiceQuery(MOCK_SERVICE.sa)
-  }
-  const handleClose = () => {
-    reset()
-    onClose()
-  }
-  const handleConfirm = () => {
-    reset()
-    onConfirm()
+  const dynamicCommand = (() => {
+    const base = `stackspot context use --sa ${selectedSa}`
+    const flags = MOCK_SA_REPOS.filter((r) => selectedRepos.has(r.name))
+      .map((r) => `--repo ${r.name}`)
+      .join(' ')
+    return flags ? `${base} ${flags}` : base
+  })()
+
+  const toggleRepo = (name: string) => {
+    setSelectedRepos((prev) => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
   }
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
-      onClick={handleClose}
-    >
-      <div
-        className="w-full max-w-[760px] overflow-hidden rounded-lg border border-border bg-surface shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <header className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <GitBranch className="h-4 w-4 text-accent" />
-              <h2 className="text-[15px] font-semibold tracking-tight">
-                Selecionar repositório pra migração
-              </h2>
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
-              {([1, 2, 3] as ModalStep[]).map((n, i) => (
-                <span key={n} className="flex items-center gap-2">
-                  {i > 0 && <ArrowRight className="h-3 w-3 text-text-muted" />}
-                  <span
-                    className={`flex h-5 items-center gap-1.5 rounded-full border px-2 ${
-                      step === n
-                        ? 'border-accent/40 bg-accent/10 text-accent'
-                        : 'border-border bg-bg text-text-muted'
+    <div className="space-y-3">
+      {/* a) Busca + preview da SA */}
+      <div>
+        <div className="text-[11.5px] text-text-secondary">
+          A SA traz uma família de repos hoje espalhados (código, ci/cd, infra, db, config).
+          A Migração Vanilla consolida tudo em um único mono-repo.
+        </div>
+        <div className="mt-2 flex items-center gap-2 rounded-md border border-border bg-bg px-2.5 py-1.5 focus-within:border-accent">
+          <Search className="h-3.5 w-3.5 flex-none text-text-muted" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="ssa-<servico>"
+            className="flex-1 bg-transparent font-mono text-[11.5px] text-text-primary placeholder:text-text-muted focus:outline-none"
+          />
+        </div>
+        {query.length > 0 && (
+          <ul className="mt-1.5 space-y-1">
+            {filtered.length === 0 && (
+              <li className="rounded border border-border bg-bg px-3 py-2 text-[11px] text-text-muted">
+                Nenhum SA encontrado pra "{query}".
+              </li>
+            )}
+            {filtered.map((sa) => {
+              const active = sa.id === selectedSa
+              return (
+                <li key={sa.id}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSa(sa.id)}
+                    className={`flex w-full items-center justify-between rounded border px-3 py-1.5 text-left transition ${
+                      active
+                        ? 'border-accent/40 bg-accent/10'
+                        : 'border-border bg-bg hover:border-border-strong'
                     }`}
                   >
-                    <span className="font-mono">{n}</span> {STEP_LABELS[n]}
-                  </span>
+                    <div className="min-w-0">
+                      <div className="truncate font-mono text-[11.5px] text-text-primary">{sa.id}</div>
+                      <div className="truncate text-[10.5px] text-text-muted">
+                        {sa.name} · {sa.squad}
+                      </div>
+                    </div>
+                    {active && <Check className="h-3.5 w-3.5 flex-none text-accent" />}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
+
+      {/* b) Lista de repos da família */}
+      <div>
+        <div className="mb-1 flex items-center justify-between">
+          <h4 className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+            Repositórios da família ({MOCK_SA_REPOS.length})
+          </h4>
+          <span className="font-mono text-[10.5px] text-text-muted">
+            {selectedRepos.size} de {MOCK_SA_REPOS.length} selecionados
+          </span>
+        </div>
+        <ul className="space-y-1">
+          {MOCK_SA_REPOS.map((r) => {
+            const KindIcon = REPO_KIND_ICONS[r.kind]
+            const kind = REPO_KIND_META[r.kind]
+            const checked = selectedRepos.has(r.name)
+            return (
+              <li
+                key={r.name}
+                className={`flex items-center gap-2 rounded border px-2.5 py-1.5 ${
+                  checked ? 'border-border bg-bg' : 'border-border bg-bg/40 opacity-60'
+                }`}
+              >
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={checked}
+                  aria-label={`${checked ? 'Desmarcar' : 'Marcar'} repo ${r.name}`}
+                  onClick={() => toggleRepo(r.name)}
+                  className={`flex h-4 w-4 flex-none items-center justify-center rounded border transition ${
+                    checked
+                      ? 'border-accent/40 bg-accent/10 text-accent'
+                      : 'border-border bg-bg text-transparent hover:border-border-strong'
+                  }`}
+                >
+                  {checked && <Check className="h-3 w-3" />}
+                </button>
+                <span className="flex h-6 w-6 flex-none items-center justify-center rounded border border-border bg-surface">
+                  <KindIcon className="h-3 w-3 text-text-secondary" />
                 </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate font-mono text-[11.5px] text-text-primary">{r.name}</span>
+                    <span
+                      className={`flex-none rounded-full border px-1.5 py-0 text-[9px] font-medium uppercase tracking-wider ${kind.tone}`}
+                    >
+                      {kind.label}
+                    </span>
+                  </div>
+                  <div className="truncate text-[10.5px] text-text-muted">
+                    {r.stack} · {r.size}
+                  </div>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      </div>
+
+      {/* c) Comando CLI dinâmico */}
+      <div>
+        <h4 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+          Comando equivalente
+        </h4>
+        <CommandBlock command={dynamicCommand} />
+      </div>
+
+      {/* d) Diff Antes/Depois */}
+      <div>
+        <h4 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+          Antes → Depois
+        </h4>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded border border-border bg-bg p-2">
+            <div className="mb-1 flex items-center justify-between">
+              <h5 className="text-[10.5px] font-semibold tracking-tight text-text-primary">
+                Antes · multi-repo
+              </h5>
+              <span className="font-mono text-[9.5px] text-text-muted">
+                {BEFORE_TREES.length} repos
+              </span>
+            </div>
+            <div className="max-h-[180px] space-y-1.5 overflow-y-auto pr-1">
+              {BEFORE_TREES.map((tree) => (
+                <div key={tree.name} className="rounded border border-border/60 bg-surface/40 p-1">
+                  <TreeNodeView node={tree} />
+                </div>
               ))}
             </div>
           </div>
-          <button
-            type="button"
-            aria-label="fechar"
-            onClick={handleClose}
-            className="flex h-7 w-7 flex-none items-center justify-center rounded text-text-muted hover:bg-bg hover:text-text-primary"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </header>
-
-        {step === 1 && (
-          <section className="space-y-4 px-5 py-5">
-            <div>
-              <label className="block text-[12px] font-medium text-text-secondary">
-                Busca por Serviço de Aplicação
-              </label>
-              <p className="mt-0.5 text-[11.5px] text-text-muted">
-                Informe a SA do serviço. A arquitetura do mono-repo Vanilla traz junto todos os
-                repositórios da família (código, ci/cd, infra, db, config) — todos vão ser
-                migrados como uma unidade.
-              </p>
-              <div className="mt-2 flex items-center gap-2">
-                <div className="flex flex-1 items-center gap-2 rounded-md border border-border bg-bg px-3 py-2 focus-within:border-accent">
-                  <Search className="h-3.5 w-3.5 flex-none text-text-muted" />
-                  <input
-                    type="text"
-                    value={serviceQuery}
-                    onChange={(e) => {
-                      setServiceQuery(e.target.value)
-                      setSearched(false)
-                    }}
-                    placeholder="ssa-<servico>"
-                    className="flex-1 bg-transparent font-mono text-[12px] text-text-primary placeholder:text-text-muted focus:outline-none"
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSearched(true)}
-                  disabled={!serviceQuery.trim()}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent px-3 text-[12px] font-medium text-black transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Search className="h-3.5 w-3.5" />
-                  Buscar
-                </button>
-              </div>
+          <div className="rounded border border-accent/30 bg-accent/[0.04] p-2">
+            <div className="mb-1 flex items-center justify-between">
+              <h5 className="text-[10.5px] font-semibold tracking-tight text-text-primary">
+                Depois · mono-repo
+              </h5>
+              <span className="font-mono text-[9.5px] text-text-muted">unificado</span>
             </div>
-
-            {searched && (
-              <div className="space-y-3">
-                <div className="rounded-md border border-border bg-bg px-4 py-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-2">
-                      <span className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-md bg-success/15 text-success">
-                        <CheckCircle2 className="h-4 w-4" />
-                      </span>
-                      <div>
-                        <div className="font-mono text-[12.5px] text-text-primary">
-                          {MOCK_SERVICE.org}/{MOCK_SERVICE.sa}
-                        </div>
-                        <div className="text-[11px] text-text-muted">{MOCK_SERVICE.name} · {MOCK_SERVICE.squad}</div>
-                      </div>
-                    </div>
-                    <span className="flex-none rounded border border-success/30 bg-success/10 px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wider text-success">
-                      {MOCK_SERVICE.repos.length} repos
-                    </span>
-                  </div>
-                  <div className="mt-2 text-[11.5px] text-text-secondary">
-                    {MOCK_SERVICE.description}
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <div className="px-1 text-[10.5px] uppercase tracking-wider text-text-muted">
-                    Repositórios da família ({MOCK_SERVICE.repos.length})
-                  </div>
-                  {MOCK_SERVICE.repos.map((r) => {
-                    const KindIcon = REPO_KIND_ICONS[r.kind]
-                    const kind = REPO_KIND_META[r.kind]
-                    return (
-                      <div
-                        key={r.name}
-                        className="flex items-center gap-3 rounded-md border border-border bg-bg px-3 py-2"
-                      >
-                        <span className="flex h-7 w-7 flex-none items-center justify-center rounded-md border border-border bg-surface">
-                          <KindIcon className="h-3.5 w-3.5 text-text-secondary" />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="truncate font-mono text-[12px] text-text-primary">
-                              {r.name}
-                            </span>
-                            <span
-                              className={`flex-none rounded-full border px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider ${kind.tone}`}
-                            >
-                              {kind.label}
-                            </span>
-                          </div>
-                          <div className="mt-0.5 truncate text-[11px] text-text-muted">
-                            {r.stack} · {r.size}
-                          </div>
-                        </div>
-                        <span className="hidden flex-none font-mono text-[10.5px] text-text-muted sm:block">
-                          {r.lastCommit}
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-          </section>
-        )}
-
-        {step === 2 && (
-          <section className="space-y-3 px-5 py-5">
-            <div className="text-[12px] text-text-secondary">
-              Cada repositório da família vira uma pasta dentro de{' '}
-              <code className="rounded bg-bg px-1.5 py-0.5 font-mono text-[11px] text-accent">
-                apps/ssa-pix-core/
-              </code>{' '}
-              — código no root, e <code className="font-mono text-[11px] text-accent">ci/</code>,{' '}
-              <code className="font-mono text-[11px] text-accent">infra/</code>,{' '}
-              <code className="font-mono text-[11px] text-accent">db/</code> e{' '}
-              <code className="font-mono text-[11px] text-accent">config/</code> como sub-pastas.
-              A tooling Vanilla (Komply, Kaptain, Orkestra) é injetada no caminho do app.
+            <div className="max-h-[180px] space-y-0.5 overflow-y-auto pr-1">
+              <TreeNodeView node={AFTER_TREE} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-md border border-border bg-bg p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <h4 className="text-[12px] font-semibold tracking-tight text-text-primary">
-                    Antes · multi-repo
-                  </h4>
-                  <span className="font-mono text-[10.5px] text-text-muted">
-                    {BEFORE_TREES.length} repos
-                  </span>
-                </div>
-                <div className="max-h-[400px] space-y-2 overflow-y-auto pr-1">
-                  {BEFORE_TREES.map((tree) => (
-                    <div
-                      key={tree.name}
-                      className="rounded border border-border/60 bg-surface/40 p-2"
-                    >
-                      <div className="space-y-0.5">
-                        <TreeNodeView node={tree} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="rounded-md border border-accent/30 bg-accent/[0.04] p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <h4 className="text-[12px] font-semibold tracking-tight text-text-primary">
-                    Depois · mono-repo Vanilla
-                  </h4>
-                  <span className="font-mono text-[10.5px] text-text-muted">unificado</span>
-                </div>
-                <div className="max-h-[400px] space-y-0.5 overflow-y-auto pr-1">
-                  <TreeNodeView node={AFTER_TREE} />
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 text-[10.5px] text-text-muted">
-              <span className="flex items-center gap-1">
-                <ArrowRightLeft className="h-3 w-3 text-info" /> movido
-              </span>
-              <span className="flex items-center gap-1">
-                <Plus className="h-3 w-3 text-success" /> adicionado
-              </span>
-              <span className="flex items-center gap-1">
-                <Minus className="h-3 w-3 text-failure" /> removido
-              </span>
-            </div>
-          </section>
-        )}
-
-        {step === 3 && (
-          <section className="space-y-3 px-5 py-5">
-            <div className="text-[12px] text-text-secondary">
-              A migração resolve débitos técnicos acumulados nos repositórios da família —
-              especialmente em infra, observabilidade e segurança. Cada item abaixo é fechado
-              automaticamente pelo template Vanilla.
-            </div>
-            <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
-              {TECH_DEBT.map((d) => {
-                const Icon = TECH_DEBT_ICONS[d.icon]
-                return (
-                  <div
-                    key={d.title}
-                    className="rounded-md border border-border bg-bg p-3"
-                  >
-                    <div className="flex items-start gap-3">
-                      <span className="mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-md bg-warning/15 text-warning">
-                        <Icon className="h-3.5 w-3.5" />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <h5 className="text-[12.5px] font-semibold text-text-primary">
-                            {d.title}
-                          </h5>
-                          <span className="flex-none rounded-full border border-failure/30 bg-failure/10 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-failure">
-                            débito
-                          </span>
-                        </div>
-                        <div className="mt-1 text-[11.5px] text-text-secondary">
-                          <span className="text-text-muted">Hoje:</span> {d.impact}
-                        </div>
-                        <div className="mt-1 text-[11.5px] text-success">
-                          <span className="text-text-muted">Pós-migração:</span> {d.resolution}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-            <div className="rounded-md border border-success/30 bg-success/[0.06] px-3 py-2 text-[11.5px] text-success">
-              {TECH_DEBT.length} débitos técnicos serão resolvidos automaticamente ao confirmar
-              a migração.
-            </div>
-          </section>
-        )}
-
-        <footer className="flex items-center justify-between border-t border-border bg-bg/50 px-5 py-3">
-          <button
-            type="button"
-            onClick={handleClose}
-            className="text-[12px] text-text-secondary hover:text-text-primary"
-          >
-            Cancelar
-          </button>
-          <div className="flex items-center gap-2">
-            {step > 1 && (
-              <button
-                type="button"
-                onClick={() => setStep((s) => (s === 3 ? 2 : 1))}
-                className="inline-flex h-9 items-center rounded-md border border-border bg-bg px-3 text-[12px] text-text-secondary hover:border-border-strong hover:text-text-primary"
-              >
-                Voltar
-              </button>
-            )}
-            {step < 3 ? (
-              <button
-                type="button"
-                onClick={() => setStep((s) => (s === 1 ? 2 : 3))}
-                disabled={step === 1 && !searched}
-                className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent px-3 text-[12px] font-medium text-black transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Próximo
-                <ArrowRight className="h-3.5 w-3.5" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleConfirm}
-                className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent px-3 text-[12px] font-medium text-black transition hover:bg-accent-hover"
-              >
-                <Check className="h-3.5 w-3.5" />
-                Confirmar migração
-              </button>
-            )}
           </div>
-        </footer>
+        </div>
+        <div className="mt-1.5 flex items-center gap-3 text-[9.5px] text-text-muted">
+          <span className="flex items-center gap-1">
+            <ArrowRightLeft className="h-2.5 w-2.5 text-info" /> movido
+          </span>
+          <span className="flex items-center gap-1">
+            <Plus className="h-2.5 w-2.5 text-success" /> adicionado
+          </span>
+          <span className="flex items-center gap-1">
+            <Minus className="h-2.5 w-2.5 text-failure" /> removido
+          </span>
+        </div>
       </div>
+    </div>
+  )
+}
+
+function ViabilityCheckDetails() {
+  const okCount = VIABILITY_CHECKS.filter((c) => c.status === 'ok').length
+  const warnCount = VIABILITY_CHECKS.filter((c) => c.status === 'warn').length
+  return (
+    <div className="space-y-2.5">
+      <div className="text-[11.5px] text-text-secondary">
+        Pre-flight check valida os 7 motores antes de disparar o workflow.{' '}
+        <span className="font-mono text-text-primary">{okCount}</span> OK,{' '}
+        <span className="font-mono text-warning">{warnCount}</span> com avisos.
+      </div>
+      <ul className="space-y-1">
+        {VIABILITY_CHECKS.map((c) => {
+          const Icon = c.status === 'ok' ? CheckCircle2 : AlertTriangle
+          const tone =
+            c.status === 'ok'
+              ? 'text-success'
+              : c.status === 'warn'
+              ? 'text-warning'
+              : 'text-failure'
+          return (
+            <li
+              key={c.id}
+              className="flex items-center justify-between rounded border border-border bg-bg px-3 py-1.5"
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <Icon className={`h-3.5 w-3.5 flex-none ${tone}`} />
+                <span className="truncate text-[11.5px] text-text-primary">{c.label}</span>
+              </div>
+              <span className="ml-2 flex-none truncate text-[10.5px] text-text-muted">
+                {c.detail}
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+      <CommandBlock command="stackspot migrate check --sa ssa-pix-core" />
+      <Link
+        to="/workflows"
+        className="inline-flex items-center gap-1 text-[11.5px] font-medium text-accent hover:underline"
+      >
+        Ver relatório completo
+        <ArrowRight className="h-3 w-3" />
+      </Link>
+    </div>
+  )
+}
+
+function TrackStatusDetails() {
+  return (
+    <div className="space-y-3">
+      <div className="text-[11.5px] text-text-secondary">
+        Dispara o workflow Vanilla server-side; abra o stream pra acompanhar
+        o progresso em tempo real.
+      </div>
+      <CommandBlock command="stackspot migrate start" />
+      <CommandBlock command="stackspot migrate status --watch" />
+
+      <div>
+        <div className="mb-1.5 flex items-center justify-between">
+          <h4 className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+            Débitos técnicos resolvidos ao ir ON-PLAT
+          </h4>
+          <span className="font-mono text-[10.5px] text-text-muted">
+            {TECH_DEBT.length} itens
+          </span>
+        </div>
+        <ul className="space-y-1.5">
+          {TECH_DEBT.map((d) => {
+            const Icon = d.icon
+            return (
+              <li
+                key={d.title}
+                className="rounded border border-border bg-bg p-2.5"
+              >
+                <div className="flex items-start gap-2">
+                  <span className="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-md bg-warning/15 text-warning">
+                    <Icon className="h-3 w-3" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h5 className="text-[11.5px] font-semibold text-text-primary">{d.title}</h5>
+                      <span className="flex-none rounded-full border border-failure/30 bg-failure/10 px-1.5 py-0 text-[9px] font-medium uppercase tracking-wider text-failure">
+                        débito
+                      </span>
+                    </div>
+                    <div className="mt-1 text-[10.5px] text-text-secondary">
+                      <span className="text-text-muted">Hoje:</span> {d.impact}
+                    </div>
+                    <div className="mt-0.5 text-[10.5px] text-success">
+                      <span className="text-text-muted">Pós-migração:</span> {d.resolution}
+                    </div>
+                  </div>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+        <div className="mt-1.5 rounded border border-success/30 bg-success/[0.06] px-2.5 py-1.5 text-[10.5px] text-success">
+          {TECH_DEBT.length} débitos resolvidos automaticamente ao concluir esse step.
+        </div>
+      </div>
+
+      <Link
+        to="/workflows"
+        className="inline-flex items-center gap-1 text-[11.5px] font-medium text-accent hover:underline"
+      >
+        Abrir Workflow Tracker
+        <ArrowRight className="h-3 w-3" />
+      </Link>
+    </div>
+  )
+}
+
+function renderStepDetails(stepId: string): ReactNode {
+  switch (stepId) {
+    case 'install-cli':
+      return <CliInstallDetails />
+    case 'login':
+      return <LoginDetails />
+    case 'select-sa':
+      return <SelectSaDetails />
+    case 'check-viability':
+      return <ViabilityCheckDetails />
+    case 'track-status':
+      return <TrackStatusDetails />
+    default:
+      return null
+  }
+}
+
+function ChecklistRow({
+  index,
+  step,
+  isCompleted,
+  isCurrent,
+  onComplete,
+}: {
+  index: number
+  step: ChecklistStep
+  isCompleted: boolean
+  isCurrent: boolean
+  onComplete: () => void
+}) {
+  const StepIcon = step.icon
+  return (
+    <li
+      className={`border-b border-border last:border-b-0 ${
+        isCompleted ? 'bg-success/[0.025]' : ''
+      } ${isCurrent && !isCompleted ? 'border-l-2 border-l-accent' : ''}`}
+    >
+      <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+        <span
+          className={`flex h-6 w-6 flex-none items-center justify-center rounded-full border font-mono text-[11px] ${
+            isCompleted
+              ? 'border-success/40 bg-success/10 text-success'
+              : 'border-border bg-bg text-text-secondary'
+          }`}
+        >
+          {isCompleted ? <Check className="h-3.5 w-3.5" /> : index}
+        </span>
+        <span
+          className={`flex h-7 w-7 flex-none items-center justify-center rounded-md border ${
+            isCompleted
+              ? 'border-border bg-bg text-text-muted'
+              : 'border-accent/30 bg-accent/10 text-accent'
+          }`}
+        >
+          <StepIcon className="h-3.5 w-3.5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div
+            className={`truncate text-[12.5px] font-medium ${
+              isCompleted ? 'text-text-secondary' : 'text-text-primary'
+            }`}
+          >
+            {step.title}
+          </div>
+          {!isCompleted && (
+            <div className="truncate text-[11.5px] text-text-muted">{step.description}</div>
+          )}
+        </div>
+        {!isCompleted && (
+          <button
+            type="button"
+            onClick={onComplete}
+            className="inline-flex h-8 flex-none items-center gap-1.5 rounded-md bg-accent px-3 text-[11.5px] font-medium text-black transition hover:bg-accent-hover"
+          >
+            <Check className="h-3.5 w-3.5" />
+            Concluir etapa
+          </button>
+        )}
+      </div>
+      <div
+        id={`step-details-${step.id}`}
+        className="border-t border-border bg-bg/40 px-4 py-3 pl-[68px]"
+      >
+        {renderStepDetails(step.id)}
+      </div>
+    </li>
+  )
+}
+
+function MigrationStatusAlert({ workflow }: { workflow: Workflow | null }) {
+  const statusVariant = (() => {
+    if (!workflow || workflow.status === 'draft') {
+      return {
+        tone: 'border-info/30 bg-info/[0.08]',
+        iconTone: 'text-info',
+        Icon: Info,
+        title: 'Nenhuma migração em andamento',
+        detail: 'Execute os comandos abaixo para iniciar a migração da sua SA.',
+        meta: '',
+      }
+    }
+    const currentStep =
+      workflow.steps.find((s) => s.status === 'in-progress') ?? workflow.steps[0]
+    const stepN = workflow.steps.findIndex((s) => s.id === currentStep?.id) + 1
+    const total = workflow.steps.length
+
+    if (workflow.status === 'running') {
+      return {
+        tone: 'border-border-strong bg-surface',
+        iconTone: 'text-live',
+        Icon: Loader2,
+        iconClass: 'animate-spin',
+        title: `Migração em curso · step ${stepN} de ${total}`,
+        detail: currentStep?.title ?? '',
+        meta: workflow.templateName,
+        live: true,
+      }
+    }
+    if (workflow.status === 'awaiting') {
+      return {
+        tone: 'border-warning/40 bg-warning/[0.08]',
+        iconTone: 'text-warning',
+        Icon: AlertTriangle,
+        title: `Aguardando intervenção em "${currentStep?.title ?? 'step atual'}"`,
+        detail: 'Um step agêntico precisa da sua revisão pra continuar.',
+        meta: workflow.templateName,
+      }
+    }
+    if (workflow.status === 'failed') {
+      return {
+        tone: 'border-failure/40 bg-failure/[0.08]',
+        iconTone: 'text-failure',
+        Icon: XCircle,
+        title: `Migração falhou em "${currentStep?.title ?? 'step atual'}"`,
+        detail: 'Consulte os logs do workflow para investigar.',
+        meta: workflow.templateName,
+      }
+    }
+    // completed handled outside (CongratsAlert substitui card+alert)
+    return {
+      tone: 'border-success/30 bg-success/[0.08]',
+      iconTone: 'text-success',
+      Icon: CheckCircle2,
+      title: 'Migração concluída',
+      detail: workflow.templateName,
+      meta: '',
+    }
+  })()
+
+  const { tone, iconTone, Icon, title, detail, meta } = statusVariant
+  const live = 'live' in statusVariant && statusVariant.live === true
+  const iconClass = 'iconClass' in statusVariant ? statusVariant.iconClass : ''
+
+  return (
+    <div className={`flex items-center gap-3 rounded-lg border px-4 py-2.5 ${tone}`}>
+      <span className="relative flex h-4 w-4 flex-none items-center justify-center">
+        <Icon className={`h-4 w-4 ${iconTone} ${iconClass ?? ''}`} />
+        {live && (
+          <span className="absolute -right-1 -top-1 flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-pulse-live rounded-full bg-live opacity-80" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-live" />
+          </span>
+        )}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[12.5px] font-medium text-text-primary">{title}</div>
+        {detail && (
+          <div className="truncate text-[11px] text-text-muted">{detail}</div>
+        )}
+      </div>
+      {meta && (
+        <span className="hidden flex-none rounded border border-border bg-bg px-1.5 py-0.5 font-mono text-[10.5px] text-text-secondary sm:inline">
+          {meta}
+        </span>
+      )}
     </div>
   )
 }
@@ -1116,132 +1110,125 @@ function CongratsAlert({
   )
 }
 
-function OnboardingCard({
-  steps,
-  contextLabel,
-  onActivate,
+function OnboardingChecklistCard({
+  completedStepIds,
+  currentStepId,
+  onToggleStep,
 }: {
-  steps: OnboardingStep[]
-  contextLabel?: string
-  onActivate: (step: OnboardingStep) => void
+  completedStepIds: Set<string>
+  currentStepId: string | null
+  onToggleStep: (stepId: string, nextCompleted: boolean) => void
 }) {
-  if (steps.length === 0) {
+  if (CHECKLIST_STEPS.length === 0) {
     return (
       <div className="rounded-lg border border-border bg-surface">
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-3.5 w-3.5 text-accent" />
-            <h3 className="text-[14px] font-semibold tracking-tight">Próximos passos</h3>
-          </div>
-        </div>
         <OnboardingPlaceholder />
       </div>
     )
   }
 
-  const total = steps.length
-  const doneCount = steps.filter((s) => s.status === 'done').length
-  const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0
-  const inProgressIdx = steps.findIndex((s) => s.status === 'in-progress')
+  // Modo "focus": mostra apenas o step atual. Fallback ao primeiro
+  // não-concluído quando `currentStepId` aponta pra fora do checklist.
+  const focusedStepIdx = (() => {
+    const byCurrent = CHECKLIST_STEPS.findIndex((s) => s.stepId === currentStepId)
+    if (byCurrent >= 0) return byCurrent
+    const firstPending = CHECKLIST_STEPS.findIndex((s) => !completedStepIds.has(s.stepId))
+    return firstPending
+  })()
+
+  const allDone = focusedStepIdx < 0
+  const totalSteps = CHECKLIST_STEPS.length
+  const doneCount = CHECKLIST_STEPS.filter((s) => completedStepIds.has(s.stepId)).length
+  const focusedStep = allDone ? null : CHECKLIST_STEPS[focusedStepIdx]
 
   return (
     <div className="rounded-lg border border-border bg-surface">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-3.5 w-3.5 text-accent" />
-          <h3 className="text-[14px] font-semibold tracking-tight">Próximos passos</h3>
-          {contextLabel && (
-            <span className="rounded border border-border bg-bg px-1.5 py-0.5 font-mono text-[10.5px] text-text-secondary">
-              {contextLabel}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-[11.5px] text-text-secondary">
-            <span className="font-mono text-text-primary">{doneCount}</span> de{' '}
-            <span className="font-mono text-text-primary">{total}</span> passos ·{' '}
-            <span className="font-mono text-text-primary">{pct}%</span> completo
-          </span>
-          <div className="h-1 w-24 overflow-hidden rounded-full bg-bg">
-            <div className="h-full bg-accent transition-all" style={{ width: `${pct}%` }} />
-          </div>
-        </div>
+      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
+        <span className="text-[11px] uppercase tracking-wider text-text-muted">
+          {allDone ? 'Checklist completo' : `Passo atual · ${focusedStepIdx + 1} de ${totalSteps}`}
+        </span>
+        <span className="font-mono text-[10.5px] text-text-muted">
+          {doneCount}/{totalSteps}
+        </span>
       </div>
-      <ul>
-        {steps.map((s, i) => {
-          const attenuated =
-            s.status === 'not-started' && inProgressIdx >= 0 && i > inProgressIdx
-          return (
-            <OnboardingStepRow
-              key={s.id}
-              step={s}
-              attenuated={attenuated}
-              onActivate={onActivate}
-            />
-          )
-        })}
-      </ul>
+      {allDone ? (
+        <div className="flex items-center gap-2 px-4 py-3">
+          <span className="flex h-6 w-6 flex-none items-center justify-center rounded-full border border-success/40 bg-success/10">
+            <Check className="h-3.5 w-3.5 text-success" />
+          </span>
+          <span className="text-[12.5px] text-text-secondary">
+            Todos os passos do onboarding foram concluídos.
+          </span>
+        </div>
+      ) : focusedStep ? (
+        <ul>
+          <ChecklistRow
+            key={focusedStep.id}
+            index={focusedStepIdx + 1}
+            step={focusedStep}
+            isCompleted={completedStepIds.has(focusedStep.stepId)}
+            isCurrent={currentStepId === focusedStep.stepId}
+            onComplete={() => onToggleStep(focusedStep.stepId, true)}
+          />
+        </ul>
+      ) : null}
     </div>
   )
 }
 
 export default function Home() {
-  const { workflows: instances, advanceStep, addWorkflow, appHubAlerts } = useWorkflows()
+  const {
+    workflows: instances,
+    appHubAlerts,
+    completeStep,
+    uncompleteStep,
+    addWorkflow,
+  } = useWorkflows()
   const primaryInstance = [...instances]
     .reverse()
     .find((inst) => !executionTemplateIds.has(inst.templateId))
   const lastWorkflow =
     primaryInstance ?? (instances.length > 0 ? instances[instances.length - 1] : null)
-  const [repoModalOpen, setRepoModalOpen] = useState(false)
 
-  const onboardingSteps: OnboardingStep[] = lastWorkflow
-    ? (() => {
-        const template = workflowTemplates.find((t) => t.id === lastWorkflow.templateId)
-        return lastWorkflow.steps.map((s, i) => {
-          const tmplStep = template?.onboardingSteps.find((ts) => ts.id === s.id)
-          const status: StepStatus =
-            s.status === 'in-progress'
-              ? 'in-progress'
-              : s.status === 'done'
-              ? 'done'
-              : 'not-started'
-          return {
-            id: i + 1,
-            stepId: s.id,
-            title: s.title,
-            description: tmplStep?.description ?? '',
-            ctaLabel: tmplStep?.ctaLabel ?? 'Abrir',
-            completedOnClick: tmplStep?.completedOnClick ?? false,
-            status,
-          }
-        })
-      })()
-    : []
+  const isMigrationWorkflow = lastWorkflow?.templateId === MIGRATION_TEMPLATE_ID
 
-  const handleStepActivate = (step: OnboardingStep) => {
-    if (!lastWorkflow) return
-    if (step.status !== 'in-progress') return
-    if (step.stepId === 'step-03-select-repos') {
-      setRepoModalOpen(true)
-      return
+  // O Alert mostra o status da migração server-side (template
+  // `wf-onboarding-vanilla-exec`), que só é criado quando o usuário conclui
+  // o step 5 ("Acompanhar Status da Migration") no checklist.
+  const executionWorkflow =
+    instances.find((inst) => inst.templateId === migrationExecutionWorkflow.id) ?? null
+
+  const completedStepIds = (() => {
+    if (isMigrationWorkflow && lastWorkflow) {
+      return new Set(lastWorkflow.steps.filter((s) => s.isCompleted).map((s) => s.id))
     }
-    if (!step.completedOnClick) return
-    advanceStep(lastWorkflow.id)
+    return new Set<string>()
+  })()
 
-    const template = workflowTemplates.find((t) => t.id === lastWorkflow.templateId)
-    const tmplStep = template?.onboardingSteps.find((s) => s.id === step.stepId)
-    if (tmplStep?.triggers) {
-      const alreadyTriggered = instances.some(
-        (inst) => inst.templateId === tmplStep.triggers!.id,
-      )
-      if (!alreadyTriggered) addWorkflow(tmplStep.triggers)
+  const currentStepId = (() => {
+    if (!isMigrationWorkflow || !lastWorkflow) return null
+    const inProgress = lastWorkflow.steps.find((s) => s.status === 'in-progress')
+    if (inProgress) return inProgress.id
+    const firstPending = lastWorkflow.steps.find((s) => !s.isCompleted)
+    return firstPending?.id ?? null
+  })()
+
+  const handleToggleStep = (stepId: string, nextCompleted: boolean) => {
+    if (!isMigrationWorkflow || !lastWorkflow) return
+    if (nextCompleted) {
+      completeStep(lastWorkflow.id, stepId)
+      // Ao concluir "Acompanhar Status da Migration", dispara a execução
+      // server-side. O tracker aparece em /workflows imediatamente.
+      const trackStatusStep = CHECKLIST_STEPS.find((c) => c.id === 'track-status')
+      if (trackStatusStep && stepId === trackStatusStep.stepId) {
+        const alreadyTriggered = instances.some(
+          (inst) => inst.templateId === migrationExecutionWorkflow.id,
+        )
+        if (!alreadyTriggered) addWorkflow(migrationExecutionWorkflow)
+      }
+    } else {
+      uncompleteStep(lastWorkflow.id, stepId)
     }
-
-  }
-
-  const handleRepoConfirm = () => {
-    if (lastWorkflow) advanceStep(lastWorkflow.id)
-    setRepoModalOpen(false)
   }
 
   const pendingAgenticItems = instances.flatMap((wf) =>
@@ -1273,9 +1260,9 @@ export default function Home() {
         </p>
       </section>
 
-      {/* Section 2 — Onboarding card (ou alert de congrats se 100%) + Fluxos pendentes (50/50) */}
-      <section className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        {lastWorkflow?.status === 'completed' ? (
+      {/* Section 2 — Onboarding (Alert + Checklist OU Congrats OU Placeholder) full-width */}
+      <section>
+        {isMigrationWorkflow && lastWorkflow?.status === 'completed' ? (
           <CongratsAlert
             workflowName={lastWorkflow.templateName}
             saName={(() => {
@@ -1286,94 +1273,23 @@ export default function Home() {
             })()}
             totalSteps={lastWorkflow.steps.length}
           />
-        ) : (
-          <OnboardingCard
-            steps={onboardingSteps}
-            contextLabel={lastWorkflow?.templateName}
-            onActivate={handleStepActivate}
-          />
-        )}
-
-        <div className="rounded-lg border border-border bg-surface">
-          <div className="flex items-center justify-between border-b border-border px-4 py-3">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-3.5 w-3.5 text-accent" />
-              <h3 className="text-[13.5px] font-semibold tracking-tight">
-                Fluxos agênticos pendentes aprovação
-              </h3>
-            </div>
-            {pendingAgenticItems.length > 0 && (
-              <span className="rounded-full bg-warning/10 px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wide text-warning">
-                {pendingAgenticItems.length} aguardando
-              </span>
-            )}
-          </div>
-          {pendingAgenticItems.length === 0 ? (
-            <EmptyState
-              icon={CheckCircle2}
-              title="Nenhuma aprovação pendente"
-              hint="Quando um workflow agêntico precisar de input humano, ele aparece aqui."
+        ) : isMigrationWorkflow ? (
+          <div className="flex flex-col gap-3">
+            {executionWorkflow && <MigrationStatusAlert workflow={executionWorkflow} />}
+            <OnboardingChecklistCard
+              completedStepIds={completedStepIds}
+              currentStepId={currentStepId}
+              onToggleStep={handleToggleStep}
             />
-          ) : (
-            <ul>
-              {pendingAgenticItems.map((p) => {
-                const ago = formatRelativeAgo(p.createdAt)
-                const isFresh = Date.now() - new Date(p.createdAt).getTime() < 60000
-                return (
-                  <Link
-                    key={`${p.workflowInstanceId}-${p.stepId}`}
-                    to={`/workflows/${p.workflowInstanceId}`}
-                    className="group flex cursor-pointer items-start gap-3 border-b border-border px-4 py-3 last:border-b-0 hover:bg-[#181A1F]"
-                  >
-                    <span className="relative mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-md bg-accent/15 text-accent">
-                      <Sparkles className="h-3.5 w-3.5" />
-                      {isFresh && (
-                        <span className="absolute -right-0.5 -top-0.5 flex h-2 w-2">
-                          <span className="absolute inline-flex h-full w-full animate-pulse-live rounded-full bg-live opacity-80" />
-                          <span className="relative inline-flex h-2 w-2 rounded-full bg-live" />
-                        </span>
-                      )}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="truncate text-[12.5px] font-medium text-text-primary">
-                          {p.stepTitle}
-                        </span>
-                        <span className="flex-none rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-accent">
-                          agêntico
-                        </span>
-                        <span className="flex-none text-[10.5px] text-text-muted">{ago}</span>
-                      </div>
-                      <div className="mt-0.5 truncate font-mono text-[11.5px] text-text-secondary">
-                        {p.prTitle}
-                      </div>
-                      <div className="mt-0.5 line-clamp-2 text-[11px] text-text-muted">
-                        {p.prSummary}
-                      </div>
-                      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10.5px] text-text-muted">
-                        <span className="font-mono">{p.prAuthor}</span>
-                        <span>·</span>
-                        <span className="inline-flex items-center gap-1">
-                          <FileText className="h-2.5 w-2.5" />
-                          <span className="font-mono">{p.filesChanged}</span> arquivos
-                        </span>
-                        <span>·</span>
-                        <span className="font-mono text-success">+{p.linesAdded}</span>
-                        <span className="font-mono text-failure">−{p.linesRemoved}</span>
-                        <span>·</span>
-                        <span className="font-mono">{p.workflowName}</span>
-                      </div>
-                    </div>
-                    <ArrowRight className="mt-1 h-3.5 w-3.5 flex-none text-text-muted opacity-0 transition group-hover:opacity-100" />
-                  </Link>
-                )
-              })}
-            </ul>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-border bg-surface">
+            <OnboardingPlaceholder />
+          </div>
+        )}
       </section>
 
-      {/* Section 3 — Alertas da Application Hub */}
+      {/* Section 3 — Pontos de atenção: Fluxos agênticos + Alertas Application Hub (50/50) */}
       <section>
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -1381,7 +1297,85 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-5">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <div className="rounded-lg border border-border bg-surface">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-3.5 w-3.5 text-accent" />
+                <h3 className="text-[13.5px] font-semibold tracking-tight">
+                  Fluxos agênticos pendentes aprovação
+                </h3>
+              </div>
+              {pendingAgenticItems.length > 0 && (
+                <span className="rounded-full bg-warning/10 px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wide text-warning">
+                  {pendingAgenticItems.length} aguardando
+                </span>
+              )}
+            </div>
+            {pendingAgenticItems.length === 0 ? (
+              <EmptyState
+                icon={CheckCircle2}
+                title="Nenhuma aprovação pendente"
+                hint="Quando um workflow agêntico precisar de input humano, ele aparece aqui."
+              />
+            ) : (
+              <ul>
+                {pendingAgenticItems.map((p) => {
+                  const ago = formatRelativeAgo(p.createdAt)
+                  const isFresh = Date.now() - new Date(p.createdAt).getTime() < 60000
+                  return (
+                    <Link
+                      key={`${p.workflowInstanceId}-${p.stepId}`}
+                      to={`/workflows/${p.workflowInstanceId}`}
+                      className="group flex cursor-pointer items-start gap-3 border-b border-border px-4 py-3 last:border-b-0 hover:bg-[#181A1F]"
+                    >
+                      <span className="relative mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-md bg-accent/15 text-accent">
+                        <Sparkles className="h-3.5 w-3.5" />
+                        {isFresh && (
+                          <span className="absolute -right-0.5 -top-0.5 flex h-2 w-2">
+                            <span className="absolute inline-flex h-full w-full animate-pulse-live rounded-full bg-live opacity-80" />
+                            <span className="relative inline-flex h-2 w-2 rounded-full bg-live" />
+                          </span>
+                        )}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate text-[12.5px] font-medium text-text-primary">
+                            {p.stepTitle}
+                          </span>
+                          <span className="flex-none rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-accent">
+                            agêntico
+                          </span>
+                          <span className="flex-none text-[10.5px] text-text-muted">{ago}</span>
+                        </div>
+                        <div className="mt-0.5 truncate font-mono text-[11.5px] text-text-secondary">
+                          {p.prTitle}
+                        </div>
+                        <div className="mt-0.5 line-clamp-2 text-[11px] text-text-muted">
+                          {p.prSummary}
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10.5px] text-text-muted">
+                          <span className="font-mono">{p.prAuthor}</span>
+                          <span>·</span>
+                          <span className="inline-flex items-center gap-1">
+                            <FileText className="h-2.5 w-2.5" />
+                            <span className="font-mono">{p.filesChanged}</span> arquivos
+                          </span>
+                          <span>·</span>
+                          <span className="font-mono text-success">+{p.linesAdded}</span>
+                          <span className="font-mono text-failure">−{p.linesRemoved}</span>
+                          <span>·</span>
+                          <span className="font-mono">{p.workflowName}</span>
+                        </div>
+                      </div>
+                      <ArrowRight className="mt-1 h-3.5 w-3.5 flex-none text-text-muted opacity-0 transition group-hover:opacity-100" />
+                    </Link>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+
           <div className="rounded-lg border border-border bg-surface">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <div className="flex items-center gap-2">
@@ -1433,12 +1427,6 @@ export default function Home() {
           </div>
         </div>
       </section>
-
-      <RepoPickerModal
-        open={repoModalOpen}
-        onClose={() => setRepoModalOpen(false)}
-        onConfirm={handleRepoConfirm}
-      />
     </div>
   )
 }
