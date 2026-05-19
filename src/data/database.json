@@ -1,0 +1,672 @@
+{
+  "assetsCatalog": [
+    {
+      "id": "cat-wf-migration-vanilla",
+      "slug": "wf-migration-vanilla",
+      "category": "workflows",
+      "name": "Migração Vanilla",
+      "description": "Migra uma SA brownfield para o padrão Operação Vanilla on-platform. Cobre build, deploy, migração de dados e rollout canário com aprovação humana entre fases.",
+      "version": "0.4.2",
+      "create_at": "2026-01-15T09:00:00.000Z",
+      "updated_at": "2026-05-12T14:30:00.000Z",
+      "steps": [
+        {
+          "id": "step-01-setup-cli",
+          "name": "Setup Inicial e Instalação de CLI",
+          "description": "Pré-requisito: Claude Code instalado. Em seguida baixa o binário oficial da CLI StackSpot e autentica via SSO Itaú."
+        },
+        {
+          "id": "step-02-login",
+          "name": "Login",
+          "description": "Autenticação SSO Itaú no realm corporativo; token persiste em ~/.stackspot/token."
+        },
+        {
+          "id": "step-03-select-sa",
+          "name": "Seleção de SA",
+          "description": "Escolher SA + repositórios da família que serão consolidados num monorepo Vanilla."
+        },
+        {
+          "id": "step-04-migration-overview",
+          "name": "Explicação sobre a Migração e Sobre os processos",
+          "description": "Entender as 4 fases da Operação Vanilla — Descoberta, Consolidação, Compliance e Deploy em Produção."
+        },
+        {
+          "id": "step-05-watch-tracker",
+          "name": "Acompanhamento do WorkflowTracker para o Processo de Deploy",
+          "description": "Disparar o workflow Vanilla server-side e abrir o WorkflowTracker pra acompanhar o deploy em tempo real."
+        },
+        {
+          "id": "step-06-watch-apphub",
+          "name": "Acompanhamento do Application Hub",
+          "description": "Pós-deploy: monitorar a aplicação ON-PLAT no Application Hub."
+        }
+      ],
+      "owner": "squad-vanilla-platform",
+      "type": "migration",
+      "status": "beta",
+      "maturity": "experimental",
+      "dependencies": {
+        "skills": ["cat-skill-scaffold-vanilla-app", "cat-skill-review-pr-comments", "cat-skill-plan-data-migration"],
+        "mcps": ["cat-mcp-kaptain-deploy", "cat-mcp-komply-evaluate", "cat-mcp-pantheon-topic-create"],
+        "apis": ["cat-api-itau-iam", "cat-api-itau-cmdb", "cat-api-itau-datadog"]
+      },
+      "inputs": [
+        {
+          "name": "sa_id",
+          "type": "string",
+          "required": true,
+          "description": "Identificador SA alvo (ex: ssa-pix-core)."
+        },
+        {
+          "name": "target_env",
+          "type": "enum(dev|hml|prod)",
+          "required": true,
+          "description": "Ambiente de destino para o rollout canário.",
+          "default": "hml"
+        },
+        {
+          "name": "data_strategy",
+          "type": "enum(dual-write|cutover)",
+          "required": false,
+          "description": "Estratégia de migração de dados.",
+          "default": "dual-write"
+        },
+        {
+          "name": "auto_decommission",
+          "type": "boolean",
+          "required": false,
+          "description": "Desligar pilha legada automaticamente após observação.",
+          "default": "false"
+        }
+      ],
+      "usage": { "consumers": 4, "runs7d": 11 }
+    },
+    {
+      "id": "cat-wf-onboarding-vanilla-exec",
+      "slug": "wf-onboarding-vanilla-exec",
+      "category": "workflows",
+      "name": "Execução Vanilla — ssa-pix-core",
+      "description": "Pipeline orquestrado disparado após o onboarding. Executa os 4 verbos da Operação Vanilla na SA configurada (build via Konstructor, deploy via Kaptain, migração de dados em dual-write e rollout canário pelo Traffik).",
+      "version": "0.4.2",
+      "create_at": "2026-02-20T11:15:00.000Z",
+      "updated_at": "2026-05-10T08:45:00.000Z",
+      "steps": [
+        {
+          "id": "verb-build",
+          "name": "build · Konstructor",
+          "description": "Empacota imagem OCI a partir do pom.xml e publica em artifactory-itau."
+        },
+        {
+          "id": "agentic-java-21-upgrade",
+          "name": "Atualizar runtime Java 8 → 21 (agêntico)",
+          "description": "Agente analisou o pom.xml e o Dockerfile, propôs PR migrando o runtime pra Java 21 LTS. Aprovação humana é obrigatória antes do deploy."
+        },
+        {
+          "id": "verb-deploy",
+          "name": "deploy · Kaptain",
+          "description": "Provisiona infra em dev via CloudFormation e sobe o app em ECS Fargate."
+        },
+        {
+          "id": "verb-migration",
+          "name": "migration · dual-write",
+          "description": "Ativa dual-write entre Oracle legado e Aurora alvo; valida lag p99 < 200ms."
+        },
+        {
+          "id": "verb-rollout",
+          "name": "rollout · Traffik",
+          "description": "Rollout canário 5% → 50% → 100% com gate humano em 50% e auto-rollback por SLO."
+        }
+      ],
+      "owner": "squad-vanilla-platform",
+      "type": "migration",
+      "status": "beta",
+      "maturity": "experimental",
+      "dependencies": {
+        "skills": ["cat-skill-scaffold-vanilla-app"],
+        "mcps": ["cat-mcp-konstructor-build", "cat-mcp-kaptain-deploy", "cat-mcp-traffik-canary", "cat-mcp-pantheon-topic-create"],
+        "apis": ["cat-api-itau-cmdb", "cat-api-itau-datadog"]
+      },
+      "inputs": [
+        {
+          "name": "sa_id",
+          "type": "string",
+          "required": true,
+          "description": "SA alvo da execução.",
+          "default": "ssa-pix-core"
+        },
+        {
+          "name": "canary_percent",
+          "type": "number",
+          "required": false,
+          "description": "Percentual inicial do rollout canário.",
+          "default": "5"
+        }
+      ],
+      "usage": { "consumers": 1, "runs7d": 1 }
+    },
+    {
+      "id": "cat-skill-scaffold-vanilla-app",
+      "slug": "scaffold-vanilla-app",
+      "category": "Skills",
+      "name": "scaffold-vanilla-app",
+      "description": "Gera o scaffolding inicial de uma aplicação na Operação Vanilla — pom.xml, Dockerfile, manifests Kaptain e pipeline base.",
+      "version": "1.2.0",
+      "create_at": "2025-11-10T10:00:00.000Z",
+      "updated_at": "2026-04-22T09:00:00.000Z"
+    },
+    {
+      "id": "cat-skill-review-pr-comments",
+      "slug": "review-pr-comments",
+      "category": "Skills",
+      "name": "review-pr-comments",
+      "description": "Skill que processa comentários de PR e propõe edições incrementais com base no contexto do repositório.",
+      "version": "0.9.1",
+      "create_at": "2026-01-08T11:30:00.000Z",
+      "updated_at": "2026-05-02T17:10:00.000Z"
+    },
+    {
+      "id": "cat-skill-plan-data-migration",
+      "slug": "plan-data-migration",
+      "category": "Skills",
+      "name": "plan-data-migration",
+      "description": "Analisa schema legado (Oracle) e propõe plano de migração pra Aurora com estratégia dual-write e janela de cutover.",
+      "version": "0.4.0",
+      "create_at": "2026-02-14T08:00:00.000Z",
+      "updated_at": "2026-05-09T12:00:00.000Z"
+    },
+    {
+      "id": "cat-mcp-kaptain-deploy",
+      "slug": "kaptain.deploy",
+      "category": "MCP",
+      "name": "kaptain.deploy",
+      "description": "MCP do Kaptain — provisiona infra (CloudFormation) e sobe a aplicação em ECS Fargate.",
+      "version": "2.3.1",
+      "create_at": "2025-09-01T00:00:00.000Z",
+      "updated_at": "2026-05-11T10:00:00.000Z"
+    },
+    {
+      "id": "cat-mcp-komply-evaluate",
+      "slug": "komply.evaluate",
+      "category": "MCP",
+      "name": "komply.evaluate",
+      "description": "MCP do Komply — avalia policies (rede, dados, classificação) contra um workload alvo.",
+      "version": "1.8.4",
+      "create_at": "2025-10-15T00:00:00.000Z",
+      "updated_at": "2026-05-07T14:00:00.000Z"
+    },
+    {
+      "id": "cat-mcp-pantheon-topic-create",
+      "slug": "pantheon.topic_create",
+      "category": "MCP",
+      "name": "pantheon.topic_create",
+      "description": "MCP do Pantheon — cria tópicos Kafka com retenção e ACL coerentes com o owner da SA.",
+      "version": "1.4.0",
+      "create_at": "2025-11-22T00:00:00.000Z",
+      "updated_at": "2026-04-30T09:30:00.000Z"
+    },
+    {
+      "id": "cat-mcp-konstructor-build",
+      "slug": "konstructor.build",
+      "category": "MCP",
+      "name": "konstructor.build",
+      "description": "MCP do Konstructor — empacota imagem OCI a partir do projeto e publica no artifactory-itau.",
+      "version": "3.0.2",
+      "create_at": "2025-08-20T00:00:00.000Z",
+      "updated_at": "2026-05-11T08:00:00.000Z"
+    },
+    {
+      "id": "cat-mcp-traffik-canary",
+      "slug": "traffik.canary",
+      "category": "MCP",
+      "name": "traffik.canary",
+      "description": "MCP do Traffik — orquestra rollouts canário (5/50/100) com gates humanos e auto-rollback por SLO.",
+      "version": "2.1.0",
+      "create_at": "2025-12-05T00:00:00.000Z",
+      "updated_at": "2026-05-06T11:00:00.000Z"
+    },
+    {
+      "id": "cat-api-itau-iam",
+      "slug": "itau-iam",
+      "category": "Apis",
+      "name": "itau-iam",
+      "description": "API interna do Itaú IAM — roles, grupos e permissões em cloud.",
+      "version": "v3.2",
+      "create_at": "2024-06-10T00:00:00.000Z",
+      "updated_at": "2026-04-18T00:00:00.000Z"
+    },
+    {
+      "id": "cat-api-itau-cmdb",
+      "slug": "itau-cmdb",
+      "category": "Apis",
+      "name": "itau-cmdb",
+      "description": "API interna do CMDB Itaú — relacionamento entre SAs, projetos, squads e ambientes.",
+      "version": "v2.7",
+      "create_at": "2023-09-01T00:00:00.000Z",
+      "updated_at": "2026-03-25T00:00:00.000Z"
+    },
+    {
+      "id": "cat-api-itau-datadog",
+      "slug": "itau-datadog",
+      "category": "Apis",
+      "name": "itau-datadog",
+      "description": "API gerenciada do Datadog — métricas, logs e SLOs por SA.",
+      "version": "v1.18",
+      "create_at": "2024-02-12T00:00:00.000Z",
+      "updated_at": "2026-05-01T00:00:00.000Z"
+    }
+  ],
+  "workflowTrackers": [
+    {
+      "id": "wfk-migration-vanilla",
+      "slug": "wf-migration-vanilla",
+      "name": "Migração Vanilla",
+      "description": "Migra uma SA brownfield para o padrão Operação Vanilla on-platform. Cobre build, deploy, migração de dados e rollout canário com aprovação humana entre fases.",
+      "version": "0.4.2",
+      "create_at": "2026-01-15T09:00:00.000Z",
+      "updated_at": "2026-05-12T14:30:00.000Z",
+      "assets_catalog_id": "cat-wf-migration-vanilla",
+      "sa": "ssa-pix-core",
+      "steps": [
+        {
+          "id": "step-01-setup-cli",
+          "slug": "step-01-setup-cli",
+          "name": "Setup Inicial e Instalação de CLI",
+          "description": "Pré-requisito: Claude Code instalado. Em seguida baixa o binário oficial da CLI StackSpot e autentica via SSO Itaú.",
+          "required": true,
+          "dependsOn": [],
+          "completedOnClick": true,
+          "ctaLabel": "Marcar como concluído",
+          "clipboardCommand": "curl -fsSL https://stackspot.itau/install.sh | sh",
+          "steps": [
+            {
+              "type": "Computacional",
+              "name": "Instalar CLI local",
+              "slug": "setup-cli-install",
+              "needHumamAproval": false,
+              "isAprovadedByHumam": null
+            }
+          ]
+        },
+        {
+          "id": "step-02-login",
+          "slug": "step-02-login",
+          "name": "Login",
+          "description": "Autenticação SSO Itaú no realm corporativo; token persiste em ~/.stackspot/token.",
+          "required": true,
+          "dependsOn": ["step-01-setup-cli"],
+          "completedOnClick": true,
+          "ctaLabel": "Marcar como concluído",
+          "clipboardCommand": "stackspot auth login --realm itau",
+          "steps": [
+            {
+              "type": "Computacional",
+              "name": "OAuth SSO Itaú",
+              "slug": "login-sso",
+              "needHumamAproval": false,
+              "isAprovadedByHumam": null
+            }
+          ]
+        },
+        {
+          "id": "step-03-select-sa",
+          "slug": "step-03-select-sa",
+          "name": "Seleção de SA",
+          "description": "Escolher SA + repositórios da família que serão consolidados num monorepo Vanilla.",
+          "required": true,
+          "dependsOn": ["step-02-login"],
+          "completedOnClick": false,
+          "ctaLabel": "Selecionar repos",
+          "clipboardCommand": "stackspot context use --sa ssa-pix-core",
+          "steps": [
+            {
+              "type": "Inference",
+              "name": "Sugerir repos candidatos",
+              "slug": "select-sa-suggest",
+              "needHumamAproval": true,
+              "isAprovadedByHumam": null
+            }
+          ]
+        },
+        {
+          "id": "step-04-migration-overview",
+          "slug": "step-04-migration-overview",
+          "name": "Explicação sobre a Migração e Sobre os processos",
+          "description": "Entender as 4 fases da Operação Vanilla — Descoberta, Consolidação, Compliance e Deploy em Produção.",
+          "required": true,
+          "dependsOn": ["step-03-select-sa"],
+          "completedOnClick": true,
+          "ctaLabel": "Entendi, disparar deploy",
+          "clipboardCommand": "stackspot migrate plan --sa ssa-pix-core",
+          "triggers_workflow_tracker_id": "wfk-onboarding-vanilla-exec",
+          "steps": [
+            {
+              "type": "Computacional",
+              "name": "Gerar plano de migração",
+              "slug": "migration-overview-plan",
+              "needHumamAproval": false,
+              "isAprovadedByHumam": null
+            }
+          ]
+        },
+        {
+          "id": "step-05-watch-tracker",
+          "slug": "step-05-watch-tracker",
+          "name": "Acompanhamento do WorkflowTracker para o Processo de Deploy",
+          "description": "Abrir o WorkflowTracker pra acompanhar o deploy em tempo real — o pipeline server-side já está rodando.",
+          "required": true,
+          "dependsOn": ["step-04-migration-overview"],
+          "completedOnClick": true,
+          "ctaLabel": "Abrir WorkflowTracker",
+          "clipboardCommand": "stackspot migrate status --watch",
+          "steps": [
+            {
+              "type": "Computacional",
+              "name": "Abrir WorkflowTracker",
+              "slug": "watch-tracker-open",
+              "needHumamAproval": false,
+              "isAprovadedByHumam": null
+            }
+          ]
+        },
+        {
+          "id": "step-06-watch-apphub",
+          "slug": "step-06-watch-apphub",
+          "name": "Acompanhamento do Application Hub",
+          "description": "Pós-deploy: monitorar a aplicação ON-PLAT no Application Hub.",
+          "required": true,
+          "dependsOn": ["step-05-watch-tracker"],
+          "completedOnClick": true,
+          "ctaLabel": "Concluir onboarding",
+          "clipboardCommand": "stackspot apphub watch --sa ssa-pix-core",
+          "steps": [
+            {
+              "type": "Computacional",
+              "name": "Abrir Application Hub",
+              "slug": "watch-apphub-open",
+              "needHumamAproval": false,
+              "isAprovadedByHumam": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "wfk-onboarding-vanilla-exec",
+      "slug": "wf-onboarding-vanilla-exec",
+      "name": "Execução Vanilla — ssa-pix-core",
+      "description": "Pipeline orquestrado disparado após o onboarding. Executa os 4 verbos da Operação Vanilla na SA configurada (build via Konstructor, deploy via Kaptain, migração de dados em dual-write e rollout canário pelo Traffik).",
+      "version": "0.4.2",
+      "create_at": "2026-02-20T11:15:00.000Z",
+      "updated_at": "2026-05-10T08:45:00.000Z",
+      "assets_catalog_id": "cat-wf-onboarding-vanilla-exec",
+      "sa": "ssa-pix-core",
+      "steps": [
+        {
+          "id": "exec-01-vuln-scan",
+          "slug": "exec-01-vuln-scan",
+          "name": "Varredura de Vulnerabilidades",
+          "description": "Komply roda SAST/DAST + SBOM contra a SA e analisa todos os repositórios (CVE scan, license audit, secrets em base64).",
+          "required": true,
+          "dependsOn": [],
+          "completedOnClick": true,
+          "ctaLabel": "Auto-executando",
+          "steps": [
+            {
+              "type": "Computacional",
+              "name": "Komply security scan",
+              "slug": "vuln-scan-komply",
+              "needHumamAproval": false,
+              "isAprovadedByHumam": null
+            }
+          ]
+        },
+        {
+          "id": "exec-02-auto-fix",
+          "slug": "exec-02-auto-fix",
+          "name": "Correção de débitos técnicos",
+          "description": "Agente aplica correções determinísticas: CVE patches, upgrade da imagem base (openjdk:8 → itau-jdk-21:lts), Vault-backed SecretProviderClass e dashboards Datadog padrão.",
+          "required": true,
+          "dependsOn": ["exec-01-vuln-scan"],
+          "completedOnClick": true,
+          "ctaLabel": "Auto-executando",
+          "steps": [
+            {
+              "type": "Computacional",
+              "name": "Auto-correção de débitos",
+              "slug": "auto-fix-debt",
+              "needHumamAproval": false,
+              "isAprovadedByHumam": null
+            }
+          ]
+        },
+        {
+          "id": "exec-03-build",
+          "slug": "exec-03-build",
+          "name": "Build",
+          "description": "Konstructor empacota a imagem OCI já corrigida e publica em artifactory-itau com tag versionada + assinatura.",
+          "required": true,
+          "dependsOn": ["exec-02-auto-fix"],
+          "completedOnClick": true,
+          "ctaLabel": "Auto-executando",
+          "steps": [
+            {
+              "type": "Computacional",
+              "name": "konstructor.build",
+              "slug": "build-konstructor",
+              "needHumamAproval": false,
+              "isAprovadedByHumam": null
+            }
+          ]
+        },
+        {
+          "id": "exec-04-provision-infra",
+          "slug": "exec-04-provision-infra",
+          "name": "Provisionamento da Infra",
+          "description": "Kaptain provisiona EKS, RDS Aurora, networking e secrets via CloudFormation, em paralelo com o setup de dashboards no Datadog.",
+          "required": true,
+          "dependsOn": ["exec-03-build"],
+          "completedOnClick": true,
+          "ctaLabel": "Auto-executando",
+          "steps": [
+            {
+              "type": "Computacional",
+              "name": "kaptain.deploy provision",
+              "slug": "provision-infra-kaptain",
+              "needHumamAproval": false,
+              "isAprovadedByHumam": null
+            }
+          ]
+        },
+        {
+          "id": "exec-05-pr-approval",
+          "slug": "exec-05-pr-approval",
+          "name": "Aprovação do PR",
+          "description": "PR proposto pelo agente — diffs do upgrade Java 21 e das correções automáticas prontos pra revisão humana.",
+          "required": true,
+          "dependsOn": ["exec-04-provision-infra"],
+          "completedOnClick": false,
+          "ctaLabel": "Revisar PR",
+          "steps": [
+            {
+              "type": "Inference",
+              "name": "Revisar PR proposto pelo agente",
+              "slug": "pr-approval-review",
+              "needHumamAproval": true,
+              "isAprovadedByHumam": null,
+              "agentic": {
+                "kind": "pr",
+                "prTitle": "chore(runtime): upgrade Java 8 → 21 LTS + correções de débitos",
+                "prAuthor": "agent · konstructor-java-bot",
+                "prSummary": "Substitui o runtime Java 8 (EOL) pelo OpenJDK 21 LTS via imagem base `itau-jdk-21:lts`. Aplica correções de débitos: secrets migrados pra Vault-backed SecretProviderClass, base image vulnerável removida, switch expressions/records modernizados. Mantém compatibilidade binária com clients Spring 5.x via shim de bytecode.",
+                "files": [
+                  {
+                    "path": "pom.xml",
+                    "language": "xml",
+                    "hunks": [
+                      {
+                        "header": "@@ -17,7 +17,7 @@ <properties>",
+                        "lines": [
+                          { "kind": "context", "text": "  <properties>" },
+                          { "kind": "del", "text": "    <java.version>1.8</java.version>" },
+                          { "kind": "add", "text": "    <java.version>21</java.version>" },
+                          { "kind": "context", "text": "    <spring-boot.version>3.2.5</spring-boot.version>" },
+                          { "kind": "context", "text": "  </properties>" }
+                        ]
+                      },
+                      {
+                        "header": "@@ -42,9 +42,12 @@ <build>",
+                        "lines": [
+                          { "kind": "context", "text": "      <plugin>" },
+                          { "kind": "context", "text": "        <artifactId>maven-compiler-plugin</artifactId>" },
+                          { "kind": "del", "text": "        <configuration>" },
+                          { "kind": "del", "text": "          <source>1.8</source>" },
+                          { "kind": "del", "text": "          <target>1.8</target>" },
+                          { "kind": "del", "text": "        </configuration>" },
+                          { "kind": "add", "text": "        <configuration>" },
+                          { "kind": "add", "text": "          <release>21</release>" },
+                          { "kind": "add", "text": "          <compilerArgs><arg>--enable-preview</arg></compilerArgs>" },
+                          { "kind": "add", "text": "        </configuration>" },
+                          { "kind": "context", "text": "      </plugin>" }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "path": "Dockerfile",
+                    "language": "dockerfile",
+                    "hunks": [
+                      {
+                        "header": "@@ -1,6 +1,6 @@",
+                        "lines": [
+                          { "kind": "del", "text": "FROM openjdk:8-jre-slim" },
+                          { "kind": "add", "text": "FROM artifactory-itau.local/itau-jdk-21:lts" },
+                          { "kind": "context", "text": "" },
+                          { "kind": "context", "text": "WORKDIR /app" },
+                          { "kind": "context", "text": "COPY target/pix-core-*.jar app.jar" },
+                          { "kind": "del", "text": "CMD [\"java\",\"-jar\",\"app.jar\"]" },
+                          { "kind": "add", "text": "CMD [\"java\",\"--enable-preview\",\"-jar\",\"app.jar\"]" }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "path": "src/main/java/com/itau/pix/PaymentService.java",
+                    "language": "java",
+                    "hunks": [
+                      {
+                        "header": "@@ -23,12 +23,9 @@ public class PaymentService {",
+                        "lines": [
+                          { "kind": "context", "text": "  public TransactionResult process(Transaction tx) {" },
+                          { "kind": "del", "text": "    String status;" },
+                          { "kind": "del", "text": "    switch (tx.getType()) {" },
+                          { "kind": "del", "text": "      case PIX: status = \"ok\"; break;" },
+                          { "kind": "del", "text": "      case TED: status = \"ok\"; break;" },
+                          { "kind": "del", "text": "      default:  status = \"unsupported\";" },
+                          { "kind": "del", "text": "    }" },
+                          { "kind": "add", "text": "    var status = switch (tx.getType()) {" },
+                          { "kind": "add", "text": "      case PIX, TED -> \"ok\";" },
+                          { "kind": "add", "text": "      default -> \"unsupported\";" },
+                          { "kind": "add", "text": "    };" },
+                          { "kind": "context", "text": "    return new TransactionResult(tx.getId(), status);" },
+                          { "kind": "context", "text": "  }" }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "path": "k8s/secrets.yaml",
+                    "language": "yaml",
+                    "hunks": [
+                      {
+                        "header": "@@ -1,8 +1,6 @@",
+                        "lines": [
+                          { "kind": "del", "text": "apiVersion: v1" },
+                          { "kind": "del", "text": "kind: Secret" },
+                          { "kind": "del", "text": "metadata: { name: pix-core-secrets }" },
+                          { "kind": "del", "text": "type: Opaque" },
+                          { "kind": "del", "text": "data:" },
+                          { "kind": "del", "text": "  DB_PASSWORD: cGFzc3dvcmQxMjM=" },
+                          { "kind": "add", "text": "apiVersion: secrets-store.csi.x-k8s.io/v1" },
+                          { "kind": "add", "text": "kind: SecretProviderClass" },
+                          { "kind": "add", "text": "metadata: { name: pix-core-vault }" },
+                          { "kind": "add", "text": "spec: { provider: vault, parameters: { roleName: pix-core } }" }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "exec-06-deploy-approval",
+          "slug": "exec-06-deploy-approval",
+          "name": "Aprovação do Deploy on Prod",
+          "description": "Gate humano final: liberar cutover em produção. O PR já foi aprovado e o canário está pronto pra rodar 1% → 100%.",
+          "required": true,
+          "dependsOn": ["exec-05-pr-approval"],
+          "completedOnClick": false,
+          "ctaLabel": "Aprovar Deploy",
+          "steps": [
+            {
+              "type": "Computacional",
+              "name": "Gate humano deploy prod",
+              "slug": "deploy-approval-gate",
+              "needHumamAproval": true,
+              "isAprovadedByHumam": null
+            }
+          ]
+        },
+        {
+          "id": "exec-07-deploy",
+          "slug": "exec-07-deploy",
+          "name": "Deploy",
+          "description": "Cutover canário em produção via Traffik (1% → 10% → 50% → 100%) com auto-rollback por SLO. Ao concluir, a SA passa a ON-PLAT.",
+          "required": true,
+          "dependsOn": ["exec-06-deploy-approval"],
+          "completedOnClick": true,
+          "ctaLabel": "Auto-executando",
+          "steps": [
+            {
+              "type": "Computacional",
+              "name": "traffik.canary rollout",
+              "slug": "deploy-traffik",
+              "needHumamAproval": false,
+              "isAprovadedByHumam": null
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "applicationHubs": [
+    {
+      "id": "ahub-ssa-pix-core",
+      "sa": "ssa-pix-core",
+      "name": "Pix Core",
+      "projectId": "proj-pix-platform",
+      "squad": "squad-pix",
+      "onPlat": true,
+      "status": "completed",
+      "health": "warn",
+      "liveIncident": false,
+      "uptime": 99.92,
+      "p95Ms": 184,
+      "errorRate": 0.42,
+      "deploys7d": 6
+    }
+  ],
+  "applicationHubNotifications": [
+    {
+      "id": "notif-hml-provisioned-ssa-pix-core",
+      "icon": "CheckCircle2",
+      "title": "Application Hub HML provisionado",
+      "description": "A pilha de homologação de ssa-pix-core foi provisionada e está saudável (p95 184ms, erro 0.42%). Acompanhe a saúde da aplicação direto no Application Hub.",
+      "cta": "Ver saúde em HML",
+      "link": "/application-hub/ssa-pix-core?env=hml",
+      "applicationHubId": "ahub-ssa-pix-core",
+      "projectId": "proj-pix-platform"
+    }
+  ]
+}

@@ -192,3 +192,104 @@
 - Consumidores podem migrar passo-a-passo no futuro.
 
 **Tipo de compatibilidade**: `WorkflowInstance` ficou como alias do `Workflow` novo (`export type WorkflowInstance = Workflow`).
+
+## 2026-05-19 — Banco de dados local em JSON (`src/data/database.json`)
+
+**Migração**
+- Toda a *data* literal (`workflows`, `applicationHubs`, `applicationHubNotifications`) saiu de `database.ts` e foi pra `src/data/database.json`. `database.ts` virou camada tipada de leitura: declara os types, importa o JSON e re-exporta com as mesmas chaves que os consumidores já usavam.
+- API pública preservada: `migrationWorkflow`, `migrationExecutionWorkflow`, `hmlPromotionWorkflow`, `workflows`, `executionTemplateIds`, `applicationHubs`, `applicationHubNotifications`. Todos os imports em `WorkflowsProvider`, `01-Home`, `02-WorkflowTrackerList`, `03-WorkflowTrackerDetail`, `04-ApplicationHub` e `06-AssetsCatalog` continuam funcionando sem alteração.
+- `migrationExecutionWorkflow` e `hmlPromotionWorkflow` são derivados via `requireWorkflow(id)` percorrendo `workflows[].onboardingSteps[].triggers`. JSON não tem referências, então cada trigger é o objeto inline dentro do step — single source of truth no JSON, sem duplicação top-level.
+
+**Tradeoff aceito**
+- JSON não permite referências cruzadas. Se algum dia houver dois workflows com o mesmo trigger, vira duplicação literal de dados — aceitável enquanto o catálogo for pequeno.
+
+**Config**
+- `tsconfig.app.json` ganhou `"resolveJsonModule": true` (TS 5 com `moduleResolution: bundler` ainda não liga isso por default).
+
+## 2026-05-19 — Schema relacional em `database.json` (assetsCatalog + workflowTrackers + applicationHubs)
+
+**Mudança estrutural**
+- `database.json` foi rachado em 3 entidades relacionais top-level: `assetsCatalog`, `workflowTrackers`, `applicationHubs` (+ `applicationHubNotifications`). Cada workflow virou 2 registros — uma linha em `assetsCatalog` (metadata + steps de alto nível) e uma em `workflowTrackers` (definição detalhada com os steppers React Flow inner). FK: `workflowTrackers.assets_catalog_id → assetsCatalog.id`.
+- Os 3 workflows existentes (Migração Vanilla / Execução Vanilla / Promoção HML) viraram catalog entries + trackers separados. Antes Execução Vanilla e Promoção HML viviam embedded como `triggers` em outer steps; agora são trackers independentes referenciados via `triggers_workflow_tracker_id` (extensão sobre o spec).
+- Skills/MCPs/APIs antes só apareciam como string refs em `dependencies` — agora cada um é uma linha em `assetsCatalog` com category=`Skills`/`MCP`/`Apis`. `Sensors` ficou vazio (nenhum existente). `dependencies` em workflows passou a apontar pros ids do catálogo (`cat-skill-…`, `cat-mcp-…`, `cat-api-…`) em vez de strings soltas.
+
+**Extensões sobre o spec do `PROGRESS.md`**
+- `AssetCatalogItem` (category=workflows) tem campos extras opcionais: `owner`, `type`, `status`, `maturity`, `dependencies`, `inputs`, `usage`. Necessário pra preservar a metadata que `06-AssetsCatalog` já renderiza e pra reconstruir `WorkflowAsset` legacy sem perder informação.
+- `WorkflowTrackerStep` (outer step) tem extras: `required`, `dependsOn`, `completedOnClick`, `ctaLabel`, `triggers_workflow_tracker_id`. Espelham `OnboardingStep` antigo + a relação parent→child entre trackers.
+- `WorkflowTrackerInnerStep` (stepper React Flow) tem `agentic` opcional — metadata de PR proposto pelo agente, antes em `OnboardingStep.agentic`.
+
+**Spelling: `needHumamAproval` e `isAprovadedByHumam`**
+- Os nomes seguem literalmente o spec do `PROGRESS.md` (typos no PT-BR). Os types em `database.ts` (`WorkflowTrackerInnerStep`) reproduzem os mesmos nomes — não renomeie sem alinhar com o autor. Note que `WorkflowsProvider.tsx` ainda usa as variantes corretas (`needHumanApproval`, `isApprovedByHuman`) no tipo `ExecutionStep` interno; as duas grafias coexistem por enquanto.
+
+**Compat layer em `database.ts`**
+- API legacy preservada por mapeamento new→old no module load: `workflows`, `migrationWorkflow`, `migrationExecutionWorkflow`, `hmlPromotionWorkflow`, `executionTemplateIds`, `applicationHubs`, `applicationHubNotifications`. `WorkflowsProvider`, `01-Home`, `02-WorkflowTrackerList`, `03-WorkflowTrackerDetail`, `04-ApplicationHub` e `06-AssetsCatalog` seguem funcionando sem mudança.
+- "Top-level workflows" calculado dinamicamente: tracker é top-level se nenhum outro tracker tem outer step com `triggers_workflow_tracker_id` apontando pra ele. Hoje só `wfk-migration-vanilla` é top-level.
+- Novos exports disponíveis pra código novo: `assetsCatalog`, `workflowTrackers`, `AssetCatalogItem`, `WorkflowTracker`, `WorkflowTrackerStep`, `WorkflowTrackerInnerStep`, `AssetCategory`.
+
+**Tradeoff aceito**
+- `dependencies` em catalog items agora guarda *ids* do catálogo (FKs), mas a API legacy precisa de *slugs* (`scaffold-vanilla-app`, `kaptain.deploy`). O compat layer resolve via `catalogById.get(id)?.slug ?? id` — funciona mesmo se algum legacy data ainda tiver slug solto, sem migração forçada.
+
+## 2026-05-19 — Steps novos do `wf-migration-vanilla` + clipboard rápido por step
+
+**Steps redesenhados (substituem os 6 antigos)**
+- `step-01-setup-cli` (Setup Inicial e Instalação de CLI) — pré-requisito Claude Code + CLI advantages.
+- `step-02-login` — SSO Itaú; explica realm/validade/token storage.
+- `step-03-select-sa` — agora carrega argumentação "por que monorepo vs multi-repo" + por-repo `platStatus` (`OFF-PLAT`/`ON-PLAT`) + `techDebtCount` com summary inline. Multi-repo é colocado explicitamente como incompatível com desenvolvimento agêntico (PRs não-atômicos).
+- `step-04-migration-overview` — explica as 4 fases (Descoberta ~12min, Consolidação ~22min, Compliance ~4min, Deploy Produção ~4min) com bullets do PROGRESS.md.
+- `step-05-watch-tracker` — ensina o usuário a acompanhar o WorkflowTracker; é o step que **dispara** `wfk-onboarding-vanilla-exec` (antes era o step-06 antigo).
+- `step-06-watch-apphub` — pós-deploy; explica Application Hub com 4 cards de métricas (p95/erro/uptime/deploys 7d) batendo com `ahub-ssa-pix-core`.
+
+**Extensão de schema: `clipboardCommand`**
+- Novo campo opcional em `WorkflowTrackerStep` (extensão sobre o spec original do PROGRESS). Cada step do `wfk-migration-vanilla` carrega um comando CLI consumido pelo card "Clipboard rápido" no Home — renderizado no header da expansão antes do contexto rico. Definido como string única; quando a UI precisa de comandos dinâmicos (Seleção SA com flags `--repo`), eles ficam dentro do componente de detalhe e o clipboard top-level é o template-canônico.
+
+**Tracker trigger movido**
+- `triggers_workflow_tracker_id: wfk-onboarding-vanilla-exec` saiu de `step-04-configure-workflow` (deletado) e foi pra `step-05-watch-tracker`. O usuário "dispara o deploy" exatamente quando começa a acompanhar o tracker — modela melhor o fluxo mental.
+- `wfk-promote-hml` continua na base mas **não é mais triggerado** pelo fluxo principal de onboarding. Fica disponível pra futuros consumidores que queiram usá-lo standalone.
+
+**Limpezas no `01-Home.tsx`**
+- Removidos: `TECH_DEBT` + `TechDebtItem` (info migrada pra `techDebtSummary` por-repo em `MOCK_SA_REPOS`), `VIABILITY_CHECKS` (não há mais step de viability), componentes `ViabilityCheckDetails` e `TrackStatusDetails`, icons `Download`/`ListChecks`/`Lock`.
+- Renomeado: `Workflow` (lucide-react icon) → `WorkflowIcon` no import — colidia com o type `Workflow` re-exportado pelo `WorkflowsProvider`.
+- Estrutura nova de expansão da ChecklistRow: "Clipboard rápido" (CommandBlock fixo) → `renderStepDetails(step.id)` (contexto rico). Componentes de detalhe não chamam mais `CommandBlock` pro comando-canônico — só renderizam contexto.
+
+## 2026-05-19 — Pipeline server-side: 7 steps, auto-advance e gates humanos
+
+**Steps redesenhados do `wfk-onboarding-vanilla-exec`** (substituem os 5 verbos antigos)
+1. `exec-01-vuln-scan` — Varredura de Vulnerabilidades (Komply SAST/DAST/SBOM); auto-advance
+2. `exec-02-auto-fix` — Correção de débitos técnicos (CVE patches, base image upgrade, Vault SecretProviderClass); auto-advance
+3. `exec-03-build` — Build (Konstructor empacota OCI assinada); auto-advance
+4. `exec-04-provision-infra` — Provisionamento (Kaptain provisiona EKS/RDS/networking); auto-advance
+5. `exec-05-pr-approval` — Aprovação do PR (gate humano com diffs + GitHub link); `completedOnClick=false`, `agentic` com 4 arquivos de diff
+6. `exec-06-deploy-approval` — Aprovação do Deploy on Prod (gate humano final); `completedOnClick=false`
+7. `exec-07-deploy` — Deploy (Traffik canary 1% → 10% → 50% → 100%); auto-advance, provisiona o hub ao concluir
+
+**Trigger movido pra step-04**
+- `triggers_workflow_tracker_id: "wfk-onboarding-vanilla-exec"` saiu do `step-05-watch-tracker` e foi pro `step-04-migration-overview`. `step-05-watch-tracker` agora é só ensinar o usuário a abrir o tracker; o pipeline já está rodando.
+
+**Auto-advance machinery (no `01-Home.tsx`)**
+- `useEffect` em `Home` observa `executionWorkflow` + `execCurrentStep`. Se `step.canProgress === true` (i.e. `completedOnClick=true` no template), agenda `advanceStep(workflowId)` via `setTimeout(2500ms)`. Cleanup com `clearTimeout` no return.
+- Steps com `canProgress=false` (`exec-05-pr-approval`, `exec-06-deploy-approval`) **pausam** o auto-advance. UI renderiza o card de aprovação correspondente; clicar em Aprovar chama `completeStep` que avança e o useEffect re-arma o timer pro próximo step.
+- Constantes guard: `EXEC_AUTO_ADVANCE_MS=2500`, `EXEC_PR_STEP_ID`, `EXEC_DEPLOY_GATE_STEP_ID`.
+
+**ExecutionStepper (componente novo)**
+- Horizontal, 7 nós com label curto + ícone + status. Step atual ganha `border-accent`, `shadow-[0_0_0_4px_rgba(255,107,44,0.12)]` e um pulse-live no canto. Conectores entre nós ficam verdes se o step anterior tá done, gradient accent→border se é o ativo, e cinza caso pendente. `EXEC_STEP_META` mapeia step.id → `{ shortLabel, icon }`.
+
+**Cards de aprovação inline**
+- `ExecPrApprovalCard` lê `agentic` do template (4 arquivos: pom.xml, Dockerfile, PaymentService.java, k8s/secrets.yaml). Mostra PR title/author/summary, totais `+adds`/`-dels`, preview do 1º arquivo, link "Ver no GitHub" (URL stub `github.itau.com.br/pix-platform/pix-core/pull/4287`). Aprovar chama `resolveAgenticItem` + `completeStep` — a primeira fecha o agentic item da `pendingAgenticFlow`, a segunda avança o step.
+- `ExecDeployApprovalCard` é mais leve: 3 KPIs (PR aprovado / Infra provisionada / Canário 1% → 100%) + Aprovar/Recusar. Aprovar chama só `completeStep`.
+
+**Provisionamento de hub: só Deploy**
+- `HUB_PROVISIONING_TEMPLATE_IDS` em `WorkflowsProvider` reduzido a `{ 'wf-onboarding-vanilla-exec' }`. `wf-migration-vanilla` saiu — não provisiona mais hub na sua trajetória final. Resultado: o hub `ahub-ssa-pix-core` só existe depois que o user aprovou o Deploy e o `exec-07-deploy` terminou.
+- `applicationHubs` em `database.json` agora começa vazio (`[]`). Antes tinha o hub seed do ssa-pix-core; isso conflitava com o requisito "Somente ao chegar na etapa de Deploy e essa etapa ter sido aprovado gere um applicationHub".
+
+## 2026-05-19 — Stepper compartilhado + auto-advance no provider + query simulada no ApplicationHub
+
+**Auto-advance migrado pro provider**
+- O `useEffect` que agendava `setTimeout` pra avançar steps com `canProgress=true` saiu de `01-Home.tsx` e foi pra `WorkflowsProvider`. Pra cada workflow em `running`, o provider observa o step atual e agenda um avanço único após `AUTO_ADVANCE_INTERVAL_MS` (2500ms). Cleanup limpa todos os timers. Re-arma a cada mudança de `workflows`.
+- Por que: antes, sair da Home interrompia o pipeline. Agora ele progride mesmo se o user estiver na `WorkflowTrackerList` ou no `WorkflowTrackerDetail` — comportamento esperado de "trabalho server-side" rodando em background.
+
+**`ExecutionTrackerView` compartilhado**
+- Criado `src/components/ExecutionTrackerView.tsx` contendo `ExecutionStepper`, `ExecPrApprovalCard`, `ExecDeployApprovalCard` + composite `ExecutionTrackerView` que encapsula a derivação de step corrente e os handlers de approval (chamam `completeStep` / `resolveAgenticItem` do contexto).
+- `01-Home.tsx` removeu ~330 linhas de inline (stepper + cards + constantes `EXEC_STEP_META`/`EXEC_PR_STEP_ID`/etc.) e agora usa só `<ExecutionTrackerView workflow={executionWorkflow} />`. Mesmo componente é usado em `03-WorkflowTrackerDetail` quando a URL bate com uma instância real do exec.
+
+**Query simulada em `04-ApplicationHub`**
+- `useEffect` reagindo a `applicationHubs` + `workflows` faz a "consulta": calcula os hubs cuja workflow de origem tem `status === 'completed'`, depois aplica `setTimeout(600ms)` antes de popular `displayedHubs`. Loading state mostra spinner + URL stub `GET /api/application-hubs?status=completed`. `displayedHubs` substitui `applicationHubs` em todo o render — empty state, `StatRow apps={...}`, contador, table — mantendo o filtro de `completed` em todos os lugares.

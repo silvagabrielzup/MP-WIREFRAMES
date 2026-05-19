@@ -31,6 +31,7 @@ import {
 } from 'lucide-react'
 import { migrationExecutionWorkflow, type AgenticPropositionMetadata } from '../data/database'
 import { useWorkflows } from '../contexts/WorkflowsProvider'
+import { ExecutionTrackerView } from '../components/ExecutionTrackerView'
 
 type StepStatus = 'pending' | 'running' | 'success' | 'failed' | 'skipped'
 type Verb = 'build' | 'agentic' | 'deploy' | 'migration' | 'rollout'
@@ -1113,12 +1114,20 @@ function CostTab() {
 
 export default function WorkflowTrackerDetail() {
   const { id } = useParams<{ id: string }>()
-  const { resolveAgenticItem } = useWorkflows()
+  const { resolveAgenticItem, workflows: instances } = useWorkflows()
   const [tab, setTab] = useState<TabKey>('fluxo')
   const [selectedId, setSelectedId] = useState<string | null>(AGENTIC_STEP_ID)
   const [approval, setApproval] = useState<ApprovalState>('pending')
 
   const wfId = id ?? 'wf-abc123'
+
+  // Quando a URL aponta pra uma instância real do pipeline server-side
+  // (`wfk-onboarding-vanilla-exec`), renderiza o stepper live + gates de
+  // aprovação no topo. Fallback: o grafo hardcoded abaixo continua.
+  const liveExecWorkflow =
+    instances.find(
+      (w) => w.id === id && w.templateId === migrationExecutionWorkflow.id,
+    ) ?? null
 
   const handleApprove = () => {
     setApproval('accepted')
@@ -1197,6 +1206,8 @@ export default function WorkflowTrackerDetail() {
           </div>
         </div>
       </header>
+
+      {liveExecWorkflow && <ExecutionTrackerView workflow={liveExecWorkflow} />}
 
       <nav className="flex flex-wrap items-center gap-1.5 border-b border-border">
         {tabs.map((t) => {

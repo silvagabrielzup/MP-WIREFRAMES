@@ -21,9 +21,7 @@ import {
   ChevronRight,
   Search,
   KeyRound,
-  ListChecks,
   Activity,
-  Download,
   Zap,
   Repeat,
   GitBranch,
@@ -42,9 +40,13 @@ import {
   Server,
   Database,
   Settings as SettingsIcon,
-  Lock,
+  Rocket,
+  Workflow as WorkflowIcon,
+  Gauge,
+  ExternalLink,
 } from 'lucide-react'
 import { useWorkflows, type Workflow } from '../contexts/WorkflowsProvider'
+import { ExecutionTrackerView } from '../components/ExecutionTrackerView'
 import {
   executionTemplateIds,
   migrationExecutionWorkflow,
@@ -79,43 +81,58 @@ type ChecklistStep = {
   icon: typeof KeyRound
   title: string
   description: string
+  /** Comando CLI exibido no card "Clipboard rápido" do step. */
+  clipboardCommand: string
 }
 
 const CHECKLIST_STEPS: ChecklistStep[] = [
   {
-    id: 'install-cli',
-    stepId: 'step-01-install-cli',
-    icon: Download,
-    title: 'Instalação de CLI',
-    description: 'Baixar e instalar a CLI do StackSpot no terminal local.',
+    id: 'setup-cli',
+    stepId: 'step-01-setup-cli',
+    icon: Terminal,
+    title: 'Setup Inicial e Instalação de CLI',
+    description: 'Pré-requisito Claude Code + instalação da CLI do StackSpot.',
+    clipboardCommand: 'curl -fsSL https://stackspot.itau/install.sh | sh',
   },
   {
     id: 'login',
-    stepId: 'step-02-permission-cloud',
+    stepId: 'step-02-login',
     icon: KeyRound,
     title: 'Login',
-    description: 'Autenticar na CLI do StackSpot com SSO Itaú.',
+    description: 'Autenticação SSO Itaú; token persiste em ~/.stackspot/token.',
+    clipboardCommand: 'stackspot auth login --realm itau',
   },
   {
     id: 'select-sa',
-    stepId: 'step-03-select-repos',
+    stepId: 'step-03-select-sa',
     icon: Search,
     title: 'Seleção de SA',
-    description: 'Escolher SA + repos da família que viram mono-repo Vanilla.',
+    description: 'Escolher SA + repos da família pra consolidar num monorepo Vanilla.',
+    clipboardCommand: 'stackspot context use --sa ssa-pix-core',
   },
   {
-    id: 'check-viability',
-    stepId: 'step-04-configure-workflow',
-    icon: ListChecks,
-    title: 'Checar viabilidade',
-    description: 'Rodar o pre-flight check antes de iniciar.',
+    id: 'migration-overview',
+    stepId: 'step-04-migration-overview',
+    icon: Info,
+    title: 'Explicação sobre a Migração e Sobre os processos',
+    description: 'As 4 fases — Descoberta, Consolidação, Compliance e Deploy em Produção.',
+    clipboardCommand: 'stackspot migrate plan --sa ssa-pix-core',
   },
   {
-    id: 'track-status',
-    stepId: 'step-06-validate-dev',
+    id: 'watch-tracker',
+    stepId: 'step-05-watch-tracker',
     icon: Activity,
-    title: 'Acompanhar Status da Migration',
-    description: 'Disparar e monitorar o workflow Vanilla em tempo real.',
+    title: 'Acompanhamento do WorkflowTracker para o Processo de Deploy',
+    description: 'Disparar o workflow Vanilla e abrir o tracker pra acompanhar o deploy em tempo real.',
+    clipboardCommand: 'stackspot migrate start --watch',
+  },
+  {
+    id: 'watch-apphub',
+    stepId: 'step-06-watch-apphub',
+    icon: LayoutGrid,
+    title: 'Acompanhamento do Application Hub',
+    description: 'Pós-deploy: monitorar a aplicação ON-PLAT no Application Hub.',
+    clipboardCommand: 'stackspot apphub watch --sa ssa-pix-core',
   },
 ]
 
@@ -146,19 +163,64 @@ const REPO_KIND_ICONS: Record<RepoKind, typeof Code2> = {
   'config': SettingsIcon,
 }
 
+type PlatStatus = 'OFF-PLAT' | 'ON-PLAT'
+
 type ServiceRepo = {
   name: string
   kind: RepoKind
   stack: string
   size: string
+  platStatus: PlatStatus
+  techDebtCount: number
+  techDebtSummary: string
 }
 
 const MOCK_SA_REPOS: ServiceRepo[] = [
-  { name: 'pix-core', kind: 'code', stack: 'Java 17 · Spring Boot 3.2', size: '184 MB · 2.418 arquivos' },
-  { name: 'pix-core-pipeline', kind: 'ci-cd', stack: 'Groovy · Jenkins shared lib', size: '4.2 MB · 38 arquivos' },
-  { name: 'pix-core-infra', kind: 'infra', stack: 'Terraform 1.5 · AWS modules', size: '18 MB · 142 arquivos' },
-  { name: 'pix-core-db', kind: 'db', stack: 'Liquibase · SQL Aurora', size: '2.8 MB · 96 arquivos' },
-  { name: 'pix-core-config', kind: 'config', stack: 'YAML · K8s manifests', size: '780 KB · 24 arquivos' },
+  {
+    name: 'pix-core',
+    kind: 'code',
+    stack: 'Java 17 · Spring Boot 3.2',
+    size: '184 MB · 2.418 arquivos',
+    platStatus: 'OFF-PLAT',
+    techDebtCount: 4,
+    techDebtSummary: 'imagem base sem CVE scan, rollback manual, sem dashboards padronizados, schema versionado à mão',
+  },
+  {
+    name: 'pix-core-pipeline',
+    kind: 'ci-cd',
+    stack: 'Groovy · Jenkins shared lib',
+    size: '4.2 MB · 38 arquivos',
+    platStatus: 'OFF-PLAT',
+    techDebtCount: 3,
+    techDebtSummary: 'pipeline free-form sem audit trail, deploy sem auto-rollback, builds locais inconsistentes',
+  },
+  {
+    name: 'pix-core-infra',
+    kind: 'infra',
+    stack: 'Terraform 1.5 · AWS modules',
+    size: '18 MB · 142 arquivos',
+    platStatus: 'OFF-PLAT',
+    techDebtCount: 2,
+    techDebtSummary: 'state local, sem drift detection contínuo',
+  },
+  {
+    name: 'pix-core-db',
+    kind: 'db',
+    stack: 'Liquibase · SQL Aurora',
+    size: '2.8 MB · 96 arquivos',
+    platStatus: 'OFF-PLAT',
+    techDebtCount: 1,
+    techDebtSummary: 'changesets aplicados via psql em prod (sem motor de migration)',
+  },
+  {
+    name: 'pix-core-config',
+    kind: 'config',
+    stack: 'YAML · K8s manifests',
+    size: '780 KB · 24 arquivos',
+    platStatus: 'OFF-PLAT',
+    techDebtCount: 2,
+    techDebtSummary: 'secrets versionados em base64, sem Vault-backed SecretProviderClass',
+  },
 ]
 
 type TreeAction = 'moved' | 'added' | 'removed'
@@ -251,52 +313,6 @@ const ACTION_LABEL: Record<TreeAction, string> = {
   removed: 'remov',
 }
 
-type TechDebtItem = {
-  icon: typeof GitBranch
-  title: string
-  impact: string
-  resolution: string
-}
-
-const TECH_DEBT: TechDebtItem[] = [
-  {
-    icon: GitBranch,
-    title: 'Pipeline Jenkins free-form',
-    impact: 'DSL Groovy livre, sem audit trail; difícil de versionar e replicar entre SAs.',
-    resolution: 'Kaptain declarativo em YAML, snapshot por execução e SLO observado.',
-  },
-  {
-    icon: Lock,
-    title: 'Secrets versionados em repo de config',
-    impact: 'Credenciais HML/PROD em base64 nos k8s/*.yaml — viola data-classification.',
-    resolution: 'Vault-backed via SecretProviderClass; Komply bloqueia `kind: Secret` literal.',
-  },
-  {
-    icon: AlertTriangle,
-    title: 'Auto-rollback ausente em deploy',
-    impact: 'Rollback de prod só manual via approval Jenkins. MTTR médio 23min nos últimos 90d.',
-    resolution: 'Traffik observa p99/erro contra SLO; rollback automático se viola threshold por 5min.',
-  },
-  {
-    icon: Server,
-    title: 'Imagens base sem scan de CVE',
-    impact: 'Dockerfile usa `openjdk:8` plano; última build trouxe 14 CVEs HIGH não tratadas.',
-    resolution: 'Komply força base aprovada (`itau-jdk-21:lts`) + scan obrigatório no Konstructor.',
-  },
-  {
-    icon: Activity,
-    title: 'Sem dashboards padronizados',
-    impact: 'Cada SA monta seu Datadog dashboard; comparar saúde entre apps é impossível.',
-    resolution: 'Orkestra injeta dashboards padrão (p99, erro %, sat CPU/mem) na primeira subida.',
-  },
-  {
-    icon: ShieldCheck,
-    title: 'Versionamento de schema manual',
-    impact: 'Equipe roda `psql` em prod via bastion; auditoria precária e drift HML/PROD.',
-    resolution: 'Liquibase no motor de Migration; cada PR de DB vira changeset versionado.',
-  },
-]
-
 const CLI_ADVANTAGES: { icon: typeof Zap; title: string; detail: string }[] = [
   { icon: Zap, title: 'Automação', detail: 'Roda em scripts, CI/CD e githooks; não depende de cliques.' },
   { icon: Repeat, title: 'Reprodutibilidade', detail: 'Mesmo comando, mesmo resultado. Idempotente por design.' },
@@ -307,13 +323,59 @@ const CLI_ADVANTAGES: { icon: typeof Zap; title: string; detail: string }[] = [
   { icon: PlugZap, title: 'Power-user', detail: 'Flags como --watch, --json, --dry-run reduzem fricção pra avançados.' },
 ]
 
-const VIABILITY_CHECKS = [
-  { id: 'komply', label: 'Komply · policies', status: 'ok' as const, detail: '0 violações críticas' },
-  { id: 'kaptain', label: 'Kaptain · CD/AWS', status: 'ok' as const, detail: 'role itau-deploy permitida' },
-  { id: 'pantheon', label: 'Pantheon · Kafka', status: 'warn' as const, detail: 'topic já existe em outro cluster' },
-  { id: 'orkestra', label: 'Orkestra · K8s', status: 'ok' as const, detail: 'namespace ssa-pix-core disponível' },
-  { id: 'traffik', label: 'Traffik · routing', status: 'ok' as const, detail: 'DNS livre' },
-  { id: 'migration', label: 'Migration · dados', status: 'ok' as const, detail: 'Aurora reachable' },
+type MigrationPhase = {
+  num: number
+  title: string
+  duration: string
+  icon: typeof Search
+  bullets: string[]
+}
+
+const MIGRATION_PHASES: MigrationPhase[] = [
+  {
+    num: 1,
+    title: 'Descoberta & Análise',
+    duration: '~12 min',
+    icon: Search,
+    bullets: [
+      'Identificar repositórios da SA',
+      'Rodar sensors de pré-análise (security, quality, performance)',
+      'Gerar relatório baseline do IUConfia',
+    ],
+  },
+  {
+    num: 2,
+    title: 'Consolidação & Correções',
+    duration: '~22 min',
+    icon: Layers,
+    bullets: [
+      'Consolidar repos em um único monorepo',
+      'Rodar validação shift-left de policies',
+      'Auto-corrigir violações + aplicar blueprints',
+      'Build segmentado + testes locais',
+    ],
+  },
+  {
+    num: 3,
+    title: 'Compliance & Aprovação',
+    duration: '~4 min',
+    icon: ShieldCheck,
+    bullets: [
+      'SAST / DAST / license audit',
+      'Abrir PR + gate de aprovação humana',
+    ],
+  },
+  {
+    num: 4,
+    title: 'Deploy em Produção',
+    duration: '~4 min',
+    icon: Rocket,
+    bullets: [
+      'Provisionar infra + deploy em staging',
+      'Smoke tests + validação do blueprint',
+      'Cutover via DNS canário 1% → 10% → 50% → 100%',
+    ],
+  },
 ]
 
 
@@ -433,9 +495,26 @@ function TreeNodeView({ node, depth = 0 }: { node: TreeNode; depth?: number }) {
   )
 }
 
-function CliInstallDetails() {
+function SetupCliDetails() {
   return (
     <div className="space-y-3">
+      <div className="rounded-md border border-warning/30 bg-warning/[0.06] p-3">
+        <div className="mb-1.5 flex items-center gap-2">
+          <AlertTriangle className="h-3.5 w-3.5 text-warning" />
+          <h4 className="text-[12px] font-semibold tracking-tight text-text-primary">
+            Pré-requisito: Claude Code instalado
+          </h4>
+        </div>
+        <div className="text-[11.5px] text-text-secondary">
+          A CLI da StackSpot delega a orquestração agêntica para o{' '}
+          <span className="font-mono text-text-primary">claude-code</span>. Sem ele
+          instalado e logado, os comandos <span className="font-mono">stackspot migrate *</span> abortam
+          com erro de runtime ausente.
+        </div>
+        <div className="mt-2">
+          <CommandBlock command="curl -fsSL https://claude.ai/install.sh | sh" />
+        </div>
+      </div>
       <div className="rounded-md border border-accent/30 bg-accent/[0.04] p-3">
         <div className="mb-2 flex items-center gap-2">
           <Terminal className="h-3.5 w-3.5 text-accent" />
@@ -463,7 +542,6 @@ function CliInstallDetails() {
           })}
         </ul>
       </div>
-      <CommandBlock command="curl -fsSL https://stackspot.itau/install.sh | sh" />
       <div className="flex items-center gap-2 text-[11px]">
         <span className="rounded-full border border-border bg-bg px-2 py-0.5 font-mono text-text-muted">
           Versão recomendada: v1.4.2
@@ -484,26 +562,47 @@ function CliInstallDetails() {
 
 function LoginDetails() {
   return (
-    <div className="space-y-2.5">
-      <div className="text-[11.5px] text-text-secondary">
-        Abre o fluxo OAuth no navegador e grava o token local em{' '}
-        <code className="rounded bg-bg px-1 font-mono text-[10.5px] text-accent">~/.stackspot/token</code>.
+    <div className="space-y-3">
+      <div className="rounded-md border border-border bg-bg p-3">
+        <div className="mb-1.5 flex items-center gap-2">
+          <KeyRound className="h-3.5 w-3.5 text-accent" />
+          <h4 className="text-[12px] font-semibold tracking-tight text-text-primary">
+            Como funciona
+          </h4>
+        </div>
+        <div className="text-[11.5px] text-text-secondary">
+          O comando abre o fluxo OAuth no realm Itaú, valida via SSO corporativo
+          (incluindo MFA quando aplicável) e grava o token em{' '}
+          <code className="rounded bg-surface px-1 font-mono text-[10.5px] text-accent">
+            ~/.stackspot/token
+          </code>
+          . O token é encriptado em repouso e tem validade de 12h; depois disso
+          a CLI auto-renova silenciosamente enquanto a sessão Itaú estiver viva.
+        </div>
       </div>
-      <CommandBlock command="stackspot auth login --realm itau" />
-      <div className="flex items-center gap-2 text-[11px]">
-        <span className="rounded-full border border-border bg-bg px-2 py-0.5 font-mono text-text-muted">
-          Sessão atual: não autenticado
-        </span>
-        <a
-          href="https://sso.itau.com.br/oauth/authorize"
-          rel="noreferrer noopener"
-          target="_blank"
-          className="inline-flex items-center gap-1 text-[11.5px] font-medium text-accent hover:underline"
-        >
-          Abrir SSO
-          <ArrowRight className="h-3 w-3" />
-        </a>
-      </div>
+      <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+        <li className="rounded border border-border bg-bg p-2">
+          <div className="text-[10.5px] uppercase tracking-wider text-text-muted">Realm</div>
+          <div className="font-mono text-[11.5px] text-text-primary">itau</div>
+        </li>
+        <li className="rounded border border-border bg-bg p-2">
+          <div className="text-[10.5px] uppercase tracking-wider text-text-muted">Validade</div>
+          <div className="font-mono text-[11.5px] text-text-primary">12h (auto-renew)</div>
+        </li>
+        <li className="rounded border border-border bg-bg p-2">
+          <div className="text-[10.5px] uppercase tracking-wider text-text-muted">Sessão atual</div>
+          <div className="font-mono text-[11.5px] text-warning">não autenticado</div>
+        </li>
+      </ul>
+      <a
+        href="https://sso.itau.com.br/oauth/authorize"
+        rel="noreferrer noopener"
+        target="_blank"
+        className="inline-flex items-center gap-1 text-[11.5px] font-medium text-accent hover:underline"
+      >
+        Abrir SSO no navegador
+        <ExternalLink className="h-3 w-3" />
+      </a>
     </div>
   )
 }
@@ -521,14 +620,6 @@ function SelectSaDetails() {
       s.name.toLowerCase().includes(query.toLowerCase()),
   )
 
-  const dynamicCommand = (() => {
-    const base = `stackspot context use --sa ${selectedSa}`
-    const flags = MOCK_SA_REPOS.filter((r) => selectedRepos.has(r.name))
-      .map((r) => `--repo ${r.name}`)
-      .join(' ')
-    return flags ? `${base} ${flags}` : base
-  })()
-
   const toggleRepo = (name: string) => {
     setSelectedRepos((prev) => {
       const next = new Set(prev)
@@ -538,15 +629,73 @@ function SelectSaDetails() {
     })
   }
 
+  const totalDebt = MOCK_SA_REPOS.filter((r) => selectedRepos.has(r.name)).reduce(
+    (sum, r) => sum + r.techDebtCount,
+    0,
+  )
+
   return (
     <div className="space-y-3">
-      {/* a) Busca + preview da SA */}
-      <div>
-        <div className="text-[11.5px] text-text-secondary">
-          A SA traz uma família de repos hoje espalhados (código, ci/cd, infra, db, config).
-          A Migração Vanilla consolida tudo em um único mono-repo.
+      {/* a) Por que monorepo */}
+      <div className="rounded-md border border-accent/30 bg-accent/[0.04] p-3">
+        <div className="mb-1.5 flex items-center gap-2">
+          <Layers className="h-3.5 w-3.5 text-accent" />
+          <h4 className="text-[12px] font-semibold tracking-tight text-text-primary">
+            Por que monorepo (e não multi-repo)?
+          </h4>
         </div>
-        <div className="mt-2 flex items-center gap-2 rounded-md border border-border bg-bg px-2.5 py-1.5 focus-within:border-accent">
+        <div className="text-[11.5px] text-text-secondary">
+          Multi-repo distribui contexto da SA por 4–6 repositórios separados —
+          código, pipeline, infra, banco, config. Pra um agente entender o
+          impacto de uma mudança ele precisa cruzar todos eles, o que multiplica
+          calls, latência e custo de tokens. <span className="text-text-primary">Monorepo</span>{' '}
+          consolida tudo num único contexto navegável, habilita refactors atômicos,
+          gera um diff legível pelo agente e elimina drift entre repos. Multi-repo
+          também não é compatível com{' '}
+          <span className="text-text-primary">desenvolvimento agêntico</span>{' '}
+          porque cada PR precisa ser coordenado manualmente entre repositórios —
+          quebra a propriedade de "uma proposta, uma revisão, um merge".
+        </div>
+        <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+          <div className="rounded border border-border bg-bg p-2">
+            <div className="text-[10.5px] uppercase tracking-wider text-text-muted">
+              Contexto agêntico
+            </div>
+            <div className="mt-0.5 flex items-center gap-1.5">
+              <span className="font-mono text-[11.5px] text-failure">5 repos</span>
+              <ArrowRight className="h-3 w-3 text-text-muted" />
+              <span className="font-mono text-[11.5px] text-success">1 monorepo</span>
+            </div>
+          </div>
+          <div className="rounded border border-border bg-bg p-2">
+            <div className="text-[10.5px] uppercase tracking-wider text-text-muted">
+              PRs por mudança
+            </div>
+            <div className="mt-0.5 flex items-center gap-1.5">
+              <span className="font-mono text-[11.5px] text-failure">3–4 PRs</span>
+              <ArrowRight className="h-3 w-3 text-text-muted" />
+              <span className="font-mono text-[11.5px] text-success">1 PR atômico</span>
+            </div>
+          </div>
+          <div className="rounded border border-border bg-bg p-2">
+            <div className="text-[10.5px] uppercase tracking-wider text-text-muted">
+              Drift entre repos
+            </div>
+            <div className="mt-0.5 flex items-center gap-1.5">
+              <span className="font-mono text-[11.5px] text-failure">comum</span>
+              <ArrowRight className="h-3 w-3 text-text-muted" />
+              <span className="font-mono text-[11.5px] text-success">impossível</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* b) Busca + preview da SA */}
+      <div>
+        <h4 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+          Buscar SA
+        </h4>
+        <div className="flex items-center gap-2 rounded-md border border-border bg-bg px-2.5 py-1.5 focus-within:border-accent">
           <Search className="h-3.5 w-3.5 flex-none text-text-muted" />
           <input
             type="text"
@@ -591,14 +740,15 @@ function SelectSaDetails() {
         )}
       </div>
 
-      {/* b) Lista de repos da família */}
+      {/* c) Lista de repos da família com platStatus + techDebt */}
       <div>
         <div className="mb-1 flex items-center justify-between">
           <h4 className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
             Repositórios da família ({MOCK_SA_REPOS.length})
           </h4>
           <span className="font-mono text-[10.5px] text-text-muted">
-            {selectedRepos.size} de {MOCK_SA_REPOS.length} selecionados
+            {selectedRepos.size} de {MOCK_SA_REPOS.length} · {totalDebt} débitos
+            técnicos
           </span>
         </div>
         <ul className="space-y-1">
@@ -606,10 +756,14 @@ function SelectSaDetails() {
             const KindIcon = REPO_KIND_ICONS[r.kind]
             const kind = REPO_KIND_META[r.kind]
             const checked = selectedRepos.has(r.name)
+            const platTone =
+              r.platStatus === 'ON-PLAT'
+                ? 'border-success/40 bg-success/10 text-success'
+                : 'border-warning/40 bg-warning/10 text-warning'
             return (
               <li
                 key={r.name}
-                className={`flex items-center gap-2 rounded border px-2.5 py-1.5 ${
+                className={`flex items-start gap-2 rounded border px-2.5 py-1.5 ${
                   checked ? 'border-border bg-bg' : 'border-border bg-bg/40 opacity-60'
                 }`}
               >
@@ -619,7 +773,7 @@ function SelectSaDetails() {
                   aria-checked={checked}
                   aria-label={`${checked ? 'Desmarcar' : 'Marcar'} repo ${r.name}`}
                   onClick={() => toggleRepo(r.name)}
-                  className={`flex h-4 w-4 flex-none items-center justify-center rounded border transition ${
+                  className={`mt-0.5 flex h-4 w-4 flex-none items-center justify-center rounded border transition ${
                     checked
                       ? 'border-accent/40 bg-accent/10 text-accent'
                       : 'border-border bg-bg text-transparent hover:border-border-strong'
@@ -627,34 +781,45 @@ function SelectSaDetails() {
                 >
                   {checked && <Check className="h-3 w-3" />}
                 </button>
-                <span className="flex h-6 w-6 flex-none items-center justify-center rounded border border-border bg-surface">
+                <span className="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded border border-border bg-surface">
                   <KindIcon className="h-3 w-3 text-text-secondary" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="truncate font-mono text-[11.5px] text-text-primary">{r.name}</span>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="truncate font-mono text-[11.5px] text-text-primary">
+                      {r.name}
+                    </span>
                     <span
                       className={`flex-none rounded-full border px-1.5 py-0 text-[9px] font-medium uppercase tracking-wider ${kind.tone}`}
                     >
                       {kind.label}
                     </span>
+                    <span
+                      className={`flex-none rounded-full border px-1.5 py-0 font-mono text-[9px] font-medium uppercase tracking-wider ${platTone}`}
+                    >
+                      {r.platStatus}
+                    </span>
+                    {r.techDebtCount > 0 && (
+                      <span className="inline-flex flex-none items-center gap-1 rounded-full border border-failure/30 bg-failure/10 px-1.5 py-0 text-[9px] font-medium uppercase tracking-wider text-failure">
+                        <AlertTriangle className="h-2.5 w-2.5" />
+                        {r.techDebtCount} débito{r.techDebtCount > 1 ? 's' : ''}
+                      </span>
+                    )}
                   </div>
-                  <div className="truncate text-[10.5px] text-text-muted">
+                  <div className="mt-0.5 truncate text-[10.5px] text-text-muted">
                     {r.stack} · {r.size}
                   </div>
+                  {r.techDebtCount > 0 && (
+                    <div className="mt-0.5 line-clamp-2 text-[10.5px] text-failure/90">
+                      <span className="text-text-muted">Resolvido pela migração:</span>{' '}
+                      {r.techDebtSummary}
+                    </div>
+                  )}
                 </div>
               </li>
             )
           })}
         </ul>
-      </div>
-
-      {/* c) Comando CLI dinâmico */}
-      <div>
-        <h4 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-          Comando equivalente
-        </h4>
-        <CommandBlock command={dynamicCommand} />
       </div>
 
       {/* d) Diff Antes/Depois */}
@@ -708,114 +873,243 @@ function SelectSaDetails() {
   )
 }
 
-function ViabilityCheckDetails() {
-  const okCount = VIABILITY_CHECKS.filter((c) => c.status === 'ok').length
-  const warnCount = VIABILITY_CHECKS.filter((c) => c.status === 'warn').length
+function MigrationOverviewDetails() {
+  const totalMin = MIGRATION_PHASES.reduce((sum, p) => {
+    const match = p.duration.match(/(\d+)/)
+    return sum + (match ? Number(match[1]) : 0)
+  }, 0)
   return (
-    <div className="space-y-2.5">
-      <div className="text-[11.5px] text-text-secondary">
-        Pre-flight check valida os 7 motores antes de disparar o workflow.{' '}
-        <span className="font-mono text-text-primary">{okCount}</span> OK,{' '}
-        <span className="font-mono text-warning">{warnCount}</span> com avisos.
+    <div className="space-y-3">
+      <div className="rounded-md border border-accent/30 bg-accent/[0.04] p-3">
+        <div className="mb-1.5 flex items-center gap-2">
+          <Info className="h-3.5 w-3.5 text-accent" />
+          <h4 className="text-[12px] font-semibold tracking-tight text-text-primary">
+            Visão geral
+          </h4>
+          <span className="ml-auto font-mono text-[10.5px] text-text-muted">
+            ~{totalMin} min total
+          </span>
+        </div>
+        <div className="text-[11.5px] text-text-secondary">
+          A Operação Vanilla executa 4 fases sequenciais. As 3 primeiras rodam
+          determinísticas via motores (Konstructor, Komply, Kaptain, Traffik); a
+          última faz cutover gradual em produção com auto-rollback por SLO.
+        </div>
       </div>
-      <ul className="space-y-1">
-        {VIABILITY_CHECKS.map((c) => {
-          const Icon = c.status === 'ok' ? CheckCircle2 : AlertTriangle
-          const tone =
-            c.status === 'ok'
-              ? 'text-success'
-              : c.status === 'warn'
-              ? 'text-warning'
-              : 'text-failure'
+
+      <ol className="space-y-2">
+        {MIGRATION_PHASES.map((phase, idx) => {
+          const Icon = phase.icon
+          const isLast = idx === MIGRATION_PHASES.length - 1
           return (
             <li
-              key={c.id}
-              className="flex items-center justify-between rounded border border-border bg-bg px-3 py-1.5"
+              key={phase.num}
+              className={`relative rounded-md border bg-bg p-3 ${
+                isLast ? 'border-accent/30 bg-accent/[0.03]' : 'border-border'
+              }`}
             >
-              <div className="flex min-w-0 items-center gap-2">
-                <Icon className={`h-3.5 w-3.5 flex-none ${tone}`} />
-                <span className="truncate text-[11.5px] text-text-primary">{c.label}</span>
+              <div className="flex items-start gap-3">
+                <span
+                  className={`flex h-8 w-8 flex-none items-center justify-center rounded-full border font-mono text-[11px] ${
+                    isLast
+                      ? 'border-accent/40 bg-accent/15 text-accent'
+                      : 'border-border bg-surface text-text-secondary'
+                  }`}
+                >
+                  {phase.num}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Icon
+                      className={`h-3.5 w-3.5 flex-none ${
+                        isLast ? 'text-accent' : 'text-text-secondary'
+                      }`}
+                    />
+                    <h5 className="text-[12.5px] font-semibold text-text-primary">
+                      Fase {phase.num} — {phase.title}
+                    </h5>
+                    <span className="rounded-full border border-border bg-surface px-1.5 py-0 font-mono text-[9.5px] text-text-muted">
+                      {phase.duration}
+                    </span>
+                  </div>
+                  <ul className="mt-1.5 space-y-1">
+                    {phase.bullets.map((b) => (
+                      <li
+                        key={b}
+                        className="flex items-start gap-1.5 text-[11.5px] text-text-secondary"
+                      >
+                        <span className="mt-1.5 h-1 w-1 flex-none rounded-full bg-text-muted" />
+                        <span>{b}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
-              <span className="ml-2 flex-none truncate text-[10.5px] text-text-muted">
-                {c.detail}
-              </span>
             </li>
           )
         })}
+      </ol>
+    </div>
+  )
+}
+
+function WatchTrackerDetails() {
+  return (
+    <div className="space-y-3">
+      <div className="rounded-md border border-accent/30 bg-accent/[0.04] p-3">
+        <div className="mb-1.5 flex items-center gap-2">
+          <WorkflowIcon className="h-3.5 w-3.5 text-accent" />
+          <h4 className="text-[12px] font-semibold tracking-tight text-text-primary">
+            O que é o WorkflowTracker
+          </h4>
+        </div>
+        <div className="text-[11.5px] text-text-secondary">
+          É a tela onde o deploy server-side roda em tempo real. Cada step do
+          pipeline aparece como nó num grafo: motores determinísticos
+          (Konstructor → Kaptain → Traffik) e steps agênticos que pedem
+          aprovação humana. Você consegue ver logs streamados, durações,
+          re-rodadas e o canário avançando de 1% pra 100%.
+        </div>
+      </div>
+
+      <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+        <li className="rounded border border-border bg-bg p-2">
+          <div className="flex items-center gap-1.5">
+            <Activity className="h-3 w-3 text-live" />
+            <div className="text-[11.5px] font-medium text-text-primary">
+              Stream ao vivo
+            </div>
+          </div>
+          <div className="mt-0.5 text-[10.5px] text-text-muted">
+            Logs por step, atualizando a cada ~2s sem refresh.
+          </div>
+        </li>
+        <li className="rounded border border-border bg-bg p-2">
+          <div className="flex items-center gap-1.5">
+            <Sparkles className="h-3 w-3 text-accent" />
+            <div className="text-[11.5px] font-medium text-text-primary">
+              Approvals agênticas
+            </div>
+          </div>
+          <div className="mt-0.5 text-[10.5px] text-text-muted">
+            PRs propostos por agentes ficam pendentes até Accept/Decline.
+          </div>
+        </li>
+        <li className="rounded border border-border bg-bg p-2">
+          <div className="flex items-center gap-1.5">
+            <ShieldCheck className="h-3 w-3 text-success" />
+            <div className="text-[11.5px] font-medium text-text-primary">
+              Auto-rollback
+            </div>
+          </div>
+          <div className="mt-0.5 text-[10.5px] text-text-muted">
+            Traffik dispara revert se SLO (p99/erro) violar threshold por 5min.
+          </div>
+        </li>
+        <li className="rounded border border-border bg-bg p-2">
+          <div className="flex items-center gap-1.5">
+            <GitBranch className="h-3 w-3 text-info" />
+            <div className="text-[11.5px] font-medium text-text-primary">
+              Re-execução granular
+            </div>
+          </div>
+          <div className="mt-0.5 text-[10.5px] text-text-muted">
+            Falhou um step? Re-roda só ele, sem refazer o pipeline inteiro.
+          </div>
+        </li>
       </ul>
-      <CommandBlock command="stackspot migrate check --sa ssa-pix-core" />
+
       <Link
         to="/workflows"
-        className="inline-flex items-center gap-1 text-[11.5px] font-medium text-accent hover:underline"
+        className="inline-flex h-9 items-center gap-2 rounded-md bg-accent px-4 text-[12.5px] font-medium text-black transition hover:bg-accent-hover"
       >
-        Ver relatório completo
-        <ArrowRight className="h-3 w-3" />
+        <Activity className="h-3.5 w-3.5" />
+        Abrir Workflow Tracker
+        <ArrowRight className="h-3.5 w-3.5" />
       </Link>
     </div>
   )
 }
 
-function TrackStatusDetails() {
+function WatchAppHubDetails() {
   return (
     <div className="space-y-3">
-      <div className="text-[11.5px] text-text-secondary">
-        Dispara o workflow Vanilla server-side; abra o stream pra acompanhar
-        o progresso em tempo real.
-      </div>
-      <CommandBlock command="stackspot migrate start" />
-      <CommandBlock command="stackspot migrate status --watch" />
-
-      <div>
-        <div className="mb-1.5 flex items-center justify-between">
-          <h4 className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-            Débitos técnicos resolvidos ao ir ON-PLAT
+      <div className="rounded-md border border-accent/30 bg-accent/[0.04] p-3">
+        <div className="mb-1.5 flex items-center gap-2">
+          <LayoutGrid className="h-3.5 w-3.5 text-accent" />
+          <h4 className="text-[12px] font-semibold tracking-tight text-text-primary">
+            Application Hub — sua aplicação ON-PLAT
           </h4>
-          <span className="font-mono text-[10.5px] text-text-muted">
-            {TECH_DEBT.length} itens
+        </div>
+        <div className="text-[11.5px] text-text-secondary">
+          Concluído o deploy, sua SA aparece no Application Hub com status{' '}
+          <span className="rounded-full border border-success/40 bg-success/10 px-1.5 py-0 font-mono text-[9.5px] text-success">
+            ON-PLAT
           </span>
+          . É o lugar único pra acompanhar saúde em runtime: SLO live, deploys
+          recentes, eventos de Komply, IUConfia e janela de incidentes. Tudo
+          alimentado pelos motores que rodaram durante a migração.
         </div>
-        <ul className="space-y-1.5">
-          {TECH_DEBT.map((d) => {
-            const Icon = d.icon
-            return (
-              <li
-                key={d.title}
-                className="rounded border border-border bg-bg p-2.5"
-              >
-                <div className="flex items-start gap-2">
-                  <span className="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-md bg-warning/15 text-warning">
-                    <Icon className="h-3 w-3" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <h5 className="text-[11.5px] font-semibold text-text-primary">{d.title}</h5>
-                      <span className="flex-none rounded-full border border-failure/30 bg-failure/10 px-1.5 py-0 text-[9px] font-medium uppercase tracking-wider text-failure">
-                        débito
-                      </span>
-                    </div>
-                    <div className="mt-1 text-[10.5px] text-text-secondary">
-                      <span className="text-text-muted">Hoje:</span> {d.impact}
-                    </div>
-                    <div className="mt-0.5 text-[10.5px] text-success">
-                      <span className="text-text-muted">Pós-migração:</span> {d.resolution}
-                    </div>
-                  </div>
-                </div>
-              </li>
-            )
-          })}
+      </div>
+
+      <ul className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+        <li className="rounded border border-border bg-bg p-2">
+          <div className="flex items-center gap-1.5 text-[10.5px] uppercase tracking-wider text-text-muted">
+            <Gauge className="h-3 w-3" /> p95
+          </div>
+          <div className="mt-0.5 font-mono text-[14px] text-success">184ms</div>
+        </li>
+        <li className="rounded border border-border bg-bg p-2">
+          <div className="flex items-center gap-1.5 text-[10.5px] uppercase tracking-wider text-text-muted">
+            <AlertTriangle className="h-3 w-3" /> Erro %
+          </div>
+          <div className="mt-0.5 font-mono text-[14px] text-success">0.42%</div>
+        </li>
+        <li className="rounded border border-border bg-bg p-2">
+          <div className="flex items-center gap-1.5 text-[10.5px] uppercase tracking-wider text-text-muted">
+            <Activity className="h-3 w-3" /> Uptime 24h
+          </div>
+          <div className="mt-0.5 font-mono text-[14px] text-success">99.95%</div>
+        </li>
+        <li className="rounded border border-border bg-bg p-2">
+          <div className="flex items-center gap-1.5 text-[10.5px] uppercase tracking-wider text-text-muted">
+            <Rocket className="h-3 w-3" /> Deploys 7d
+          </div>
+          <div className="mt-0.5 font-mono text-[14px] text-text-primary">1</div>
+        </li>
+      </ul>
+
+      <div className="rounded-md border border-border bg-bg p-3">
+        <h4 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+          O que ver no Application Hub
+        </h4>
+        <ul className="space-y-1 text-[11.5px] text-text-secondary">
+          <li className="flex items-start gap-1.5">
+            <span className="mt-1.5 h-1 w-1 flex-none rounded-full bg-text-muted" />
+            <span>Saúde em runtime (p95, erro %, uptime, throughput)</span>
+          </li>
+          <li className="flex items-start gap-1.5">
+            <span className="mt-1.5 h-1 w-1 flex-none rounded-full bg-text-muted" />
+            <span>IUConfia atual + delta vs. mês anterior</span>
+          </li>
+          <li className="flex items-start gap-1.5">
+            <span className="mt-1.5 h-1 w-1 flex-none rounded-full bg-text-muted" />
+            <span>Eventos Komply, violações de policy e checks pendentes</span>
+          </li>
+          <li className="flex items-start gap-1.5">
+            <span className="mt-1.5 h-1 w-1 flex-none rounded-full bg-text-muted" />
+            <span>Histórico de deploys + linhagem com workflows do Tracker</span>
+          </li>
         </ul>
-        <div className="mt-1.5 rounded border border-success/30 bg-success/[0.06] px-2.5 py-1.5 text-[10.5px] text-success">
-          {TECH_DEBT.length} débitos resolvidos automaticamente ao concluir esse step.
-        </div>
       </div>
 
       <Link
-        to="/workflows"
-        className="inline-flex items-center gap-1 text-[11.5px] font-medium text-accent hover:underline"
+        to="/application-hub/ssa-pix-core"
+        className="inline-flex h-9 items-center gap-2 rounded-md bg-accent px-4 text-[12.5px] font-medium text-black transition hover:bg-accent-hover"
       >
-        Abrir Workflow Tracker
-        <ArrowRight className="h-3 w-3" />
+        <LayoutGrid className="h-3.5 w-3.5" />
+        Abrir Application Hub
+        <ArrowRight className="h-3.5 w-3.5" />
       </Link>
     </div>
   )
@@ -823,16 +1117,18 @@ function TrackStatusDetails() {
 
 function renderStepDetails(stepId: string): ReactNode {
   switch (stepId) {
-    case 'install-cli':
-      return <CliInstallDetails />
+    case 'setup-cli':
+      return <SetupCliDetails />
     case 'login':
       return <LoginDetails />
     case 'select-sa':
       return <SelectSaDetails />
-    case 'check-viability':
-      return <ViabilityCheckDetails />
-    case 'track-status':
-      return <TrackStatusDetails />
+    case 'migration-overview':
+      return <MigrationOverviewDetails />
+    case 'watch-tracker':
+      return <WatchTrackerDetails />
+    case 'watch-apphub':
+      return <WatchAppHubDetails />
     default:
       return null
   }
@@ -852,17 +1148,24 @@ function ChecklistRow({
   onComplete: () => void
 }) {
   const StepIcon = step.icon
+  // Locked = not the current step (completed OR future). Cannot be expanded.
+  const isLocked = !isCurrent
   return (
     <li
+      aria-disabled={isLocked || undefined}
       className={`border-b border-border last:border-b-0 ${
         isCompleted ? 'bg-success/[0.025]' : ''
-      } ${isCurrent && !isCompleted ? 'border-l-2 border-l-accent' : ''}`}
+      } ${isCurrent ? 'border-l-2 border-l-accent' : ''} ${
+        isLocked ? 'pointer-events-none select-none opacity-50' : ''
+      }`}
     >
       <div className="flex flex-wrap items-center gap-3 px-4 py-3">
         <span
           className={`flex h-6 w-6 flex-none items-center justify-center rounded-full border font-mono text-[11px] ${
             isCompleted
               ? 'border-success/40 bg-success/10 text-success'
+              : isCurrent
+              ? 'border-accent/40 bg-accent/10 text-accent'
               : 'border-border bg-bg text-text-secondary'
           }`}
         >
@@ -872,7 +1175,9 @@ function ChecklistRow({
           className={`flex h-7 w-7 flex-none items-center justify-center rounded-md border ${
             isCompleted
               ? 'border-border bg-bg text-text-muted'
-              : 'border-accent/30 bg-accent/10 text-accent'
+              : isCurrent
+              ? 'border-accent/30 bg-accent/10 text-accent'
+              : 'border-border bg-bg text-text-muted'
           }`}
         >
           <StepIcon className="h-3.5 w-3.5" />
@@ -880,7 +1185,7 @@ function ChecklistRow({
         <div className="min-w-0 flex-1">
           <div
             className={`truncate text-[12.5px] font-medium ${
-              isCompleted ? 'text-text-secondary' : 'text-text-primary'
+              isCompleted || !isCurrent ? 'text-text-secondary' : 'text-text-primary'
             }`}
           >
             {step.title}
@@ -889,7 +1194,7 @@ function ChecklistRow({
             <div className="truncate text-[11.5px] text-text-muted">{step.description}</div>
           )}
         </div>
-        {!isCompleted && (
+        {isCurrent && !isCompleted && (
           <button
             type="button"
             onClick={onComplete}
@@ -900,12 +1205,20 @@ function ChecklistRow({
           </button>
         )}
       </div>
-      <div
-        id={`step-details-${step.id}`}
-        className="border-t border-border bg-bg/40 px-4 py-3 pl-[68px]"
-      >
-        {renderStepDetails(step.id)}
-      </div>
+      {isCurrent && !isCompleted && (
+        <div
+          id={`step-details-${step.id}`}
+          className="space-y-3 border-t border-border bg-bg/40 px-4 py-3 pl-[68px]"
+        >
+          <div>
+            <h4 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+              Clipboard rápido
+            </h4>
+            <CommandBlock command={step.clipboardCommand} />
+          </div>
+          {renderStepDetails(step.id)}
+        </div>
+      )}
     </li>
   )
 }
@@ -1127,8 +1440,8 @@ function OnboardingChecklistCard({
     )
   }
 
-  // Modo "focus": mostra apenas o step atual. Fallback ao primeiro
-  // não-concluído quando `currentStepId` aponta pra fora do checklist.
+  // Step atual = primeiro não-concluído que case com `currentStepId`, ou
+  // fallback ao primeiro pendente. Os demais ficam visíveis mas locked.
   const focusedStepIdx = (() => {
     const byCurrent = CHECKLIST_STEPS.findIndex((s) => s.stepId === currentStepId)
     if (byCurrent >= 0) return byCurrent
@@ -1139,7 +1452,6 @@ function OnboardingChecklistCard({
   const allDone = focusedStepIdx < 0
   const totalSteps = CHECKLIST_STEPS.length
   const doneCount = CHECKLIST_STEPS.filter((s) => completedStepIds.has(s.stepId)).length
-  const focusedStep = allDone ? null : CHECKLIST_STEPS[focusedStepIdx]
 
   return (
     <div className="rounded-lg border border-border bg-surface">
@@ -1160,21 +1472,31 @@ function OnboardingChecklistCard({
             Todos os passos do onboarding foram concluídos.
           </span>
         </div>
-      ) : focusedStep ? (
+      ) : (
         <ul>
-          <ChecklistRow
-            key={focusedStep.id}
-            index={focusedStepIdx + 1}
-            step={focusedStep}
-            isCompleted={completedStepIds.has(focusedStep.stepId)}
-            isCurrent={currentStepId === focusedStep.stepId}
-            onComplete={() => onToggleStep(focusedStep.stepId, true)}
-          />
+          {CHECKLIST_STEPS.map((step, idx) => (
+            <ChecklistRow
+              key={step.id}
+              index={idx + 1}
+              step={step}
+              isCompleted={completedStepIds.has(step.stepId)}
+              isCurrent={idx === focusedStepIdx}
+              onComplete={() => onToggleStep(step.stepId, true)}
+            />
+          ))}
         </ul>
-      ) : null}
+      )}
     </div>
   )
 }
+
+// =============================================================================
+// Execução server-side (`wfk-onboarding-vanilla-exec`) — stepper + gates
+// =============================================================================
+// Componentes ExecutionStepper / ExecPrApprovalCard / ExecDeployApprovalCard /
+// ExecutionTrackerView vivem em `src/components/ExecutionTrackerView.tsx` —
+// reutilizados pelo Home e pelo WorkflowTrackerDetail. O auto-advance roda no
+// WorkflowsProvider.
 
 export default function Home() {
   const {
@@ -1217,10 +1539,13 @@ export default function Home() {
     if (!isMigrationWorkflow || !lastWorkflow) return
     if (nextCompleted) {
       completeStep(lastWorkflow.id, stepId)
-      // Ao concluir "Acompanhar Status da Migration", dispara a execução
-      // server-side. O tracker aparece em /workflows imediatamente.
-      const trackStatusStep = CHECKLIST_STEPS.find((c) => c.id === 'track-status')
-      if (trackStatusStep && stepId === trackStatusStep.stepId) {
+      // Ao concluir "Explicação sobre a Migração" o pipeline server-side é
+      // disparado — `wfk-onboarding-vanilla-exec` aparece com o 1º step
+      // (Varredura de Vulnerabilidades) em `in-progress`. O auto-advance abaixo
+      // (useEffect) cuida de tocar pra frente até bater em uma etapa de
+      // aprovação humana.
+      const triggerStep = CHECKLIST_STEPS.find((c) => c.id === 'migration-overview')
+      if (triggerStep && stepId === triggerStep.stepId) {
         const alreadyTriggered = instances.some(
           (inst) => inst.templateId === migrationExecutionWorkflow.id,
         )
@@ -1230,6 +1555,11 @@ export default function Home() {
       uncompleteStep(lastWorkflow.id, stepId)
     }
   }
+
+  // Auto-advance + cards de aprovação (PR + Deploy) ficam no
+  // `ExecutionTrackerView` compartilhado. O auto-advance roda no
+  // WorkflowsProvider, então o pipeline progride mesmo se o user sair
+  // dessa tela.
 
   const pendingAgenticItems = instances.flatMap((wf) =>
     wf.pendingAgenticFlow.map((item) => ({
@@ -1276,6 +1606,7 @@ export default function Home() {
         ) : isMigrationWorkflow ? (
           <div className="flex flex-col gap-3">
             {executionWorkflow && <MigrationStatusAlert workflow={executionWorkflow} />}
+            {executionWorkflow && <ExecutionTrackerView workflow={executionWorkflow} />}
             <OnboardingChecklistCard
               completedStepIds={completedStepIds}
               currentStepId={currentStepId}

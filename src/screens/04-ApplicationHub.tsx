@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ChevronRight,
@@ -6,11 +7,13 @@ import {
   Boxes,
   Sparkles,
   CheckCircle2,
+  Loader2,
 } from 'lucide-react'
 import { type ApplicationHub, type ApplicationHubHealth } from '../data/database'
 import { useWorkflows } from '../contexts/WorkflowsProvider'
 
-const MIGRATION_EXECUTION_TEMPLATE_ID = 'wf-onboarding-vanilla-exec'
+/** Latência simulada da query do backend de Application Hubs. */
+const QUERY_LATENCY_MS = 600
 
 const healthMeta: Record<
   ApplicationHubHealth,
@@ -87,10 +90,10 @@ function Stat({
     color === 'success'
       ? 'text-success'
       : color === 'warning'
-      ? 'text-warning'
-      : color === 'failure'
-      ? 'text-failure'
-      : 'text-text-primary'
+        ? 'text-warning'
+        : color === 'failure'
+          ? 'text-failure'
+          : 'text-text-primary'
   return (
     <div className="rounded-lg border border-border bg-surface px-4 py-3">
       <div className="text-[11px] uppercase tracking-wider text-text-muted">{label}</div>
@@ -103,14 +106,27 @@ function Stat({
 export default function ApplicationHub() {
   const { applicationHubs, workflows } = useWorkflows()
 
+  // Query simulada: filtra hubs direto pela própria entidade
+  // (`status === 'completed'`). Não cruza mais com `workflows` — o estado
+  // do hub é canônico. Wireframe — em produção isso seria um fetch real.
+  const [isLoading, setIsLoading] = useState(true)
+  const [displayedHubs, setDisplayedHubs] = useState<ApplicationHub[]>([])
+  useEffect(() => {
+    setIsLoading(true)
+    const timer = window.setTimeout(() => {
+      setDisplayedHubs(applicationHubs.filter((h) => h.status === 'completed'))
+      setIsLoading(false)
+    }, QUERY_LATENCY_MS)
+
+    console.log(applicationHubs)
+    return () => window.clearTimeout(timer)
+  }, [applicationHubs])
+
   // SAs recém-migrados: workflow de execução `wf-onboarding-vanilla-exec`
   // concluído → hub provisionado pelo provider.
   const recentlyMigratedSAs = new Set(
     workflows
-      .filter(
-        (w) =>
-          w.templateId === MIGRATION_EXECUTION_TEMPLATE_ID && w.status === 'completed',
-      )
+      .filter((w) => w.status === 'completed')
       .map((w) => {
         const saInput = w.name.match(/ssa-[a-z0-9-]+/i)
         return saInput ? saInput[0] : 'ssa-pix-core'
@@ -144,7 +160,17 @@ export default function ApplicationHub() {
         </div>
       </header>
 
-      {applicationHubs.length === 0 ? (
+      {isLoading ? (
+        <section className="flex flex-col items-center justify-center gap-3 rounded-lg border border-border bg-surface px-6 py-16 text-center">
+          <Loader2 className="h-5 w-5 animate-spin text-accent" />
+          <div className="text-[13px] font-medium text-text-secondary">
+            Consultando Application Hubs…
+          </div>
+          <div className="font-mono text-[10.5px] text-text-muted">
+            GET /api/application-hubs?status=completed
+          </div>
+        </section>
+      ) : displayedHubs.length === 0 ? (
         <section className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-surface px-6 py-16 text-center">
           <span className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-[#181A1F]">
             <Boxes className="h-5 w-5 text-text-muted" />
@@ -185,14 +211,14 @@ export default function ApplicationHub() {
               </div>
             </div>
           )}
-          <StatRow apps={applicationHubs} />
+          <StatRow apps={displayedHubs} />
 
           <section>
             <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <h2 className="text-[15px] font-semibold tracking-tight">Aplicações</h2>
                 <span className="text-[12px] text-text-muted">
-                  {applicationHubs.length} on-platform
+                  {displayedHubs.length} on-platform
                 </span>
               </div>
               <button className="text-[11.5px] text-text-secondary hover:text-text-primary">
@@ -215,56 +241,56 @@ export default function ApplicationHub() {
                   </tr>
                 </thead>
                 <tbody>
-                  {applicationHubs.map((a) => {
-                const meta = healthMeta[a.health]
-                return (
-                  <tr key={a.id} className="group border-b border-border last:border-b-0 hover:bg-[#181A1F]">
-                    <td className="px-4 py-2.5">
-                      <Link to={`/application-hub/${a.sa}`} className="block">
-                        <div className="flex items-center gap-2">
-                          <span className="text-text-primary">{a.name}</span>
-                          {a.onPlat && (
-                            <span className="rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-accent">
-                              on-plat
-                            </span>
-                          )}
-                          {recentlyMigratedSAs.has(a.sa) && (
-                            <span className="inline-flex items-center gap-1 rounded border border-success/30 bg-success/10 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-success">
-                              <Sparkles className="h-2.5 w-2.5" />
-                              recém-migrada
-                            </span>
-                          )}
-                        </div>
-                        <div className="mt-0.5 font-mono text-[10.5px] text-text-muted">{a.sa}</div>
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2.5 text-text-secondary">{a.squad}</td>
-                    <td className="px-4 py-2.5">
-                      <div className="flex items-center gap-2">
-                        <HealthPill status={a.health} />
-                        {a.liveIncident && (
-                          <span className="inline-flex items-center gap-1 text-[10.5px] uppercase tracking-wider text-failure">
-                            <LivePulse />
-                            live
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-2.5 text-right font-mono text-text-primary">{a.uptime.toFixed(2)}%</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-text-secondary">{a.p95Ms}ms</td>
-                    <td className={`px-4 py-2.5 text-right font-mono ${meta.text}`}>{a.errorRate.toFixed(2)}%</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-text-secondary">{a.deploys7d}</td>
-                    <td className="px-4 py-2.5 text-right">
-                      <Link
-                        to={`/application-hub/${a.sa}`}
-                        className="inline-flex items-center gap-1 text-[11.5px] text-text-muted opacity-0 transition group-hover:opacity-100 hover:text-text-primary"
-                      >
-                        detalhe
-                        <ArrowRight className="h-3 w-3" />
-                      </Link>
-                    </td>
-                  </tr>
-                )
+                  {displayedHubs.map((a) => {
+                    const meta = healthMeta[a.health]
+                    return (
+                      <tr key={a.id} className="group border-b border-border last:border-b-0 hover:bg-[#181A1F]">
+                        <td className="px-4 py-2.5">
+                          <Link to={`/application-hub/${a.sa}`} className="block">
+                            <div className="flex items-center gap-2">
+                              <span className="text-text-primary">{a.name}</span>
+                              {a.onPlat && (
+                                <span className="rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-accent">
+                                  on-plat
+                                </span>
+                              )}
+                              {recentlyMigratedSAs.has(a.sa) && (
+                                <span className="inline-flex items-center gap-1 rounded border border-success/30 bg-success/10 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-wider text-success">
+                                  <Sparkles className="h-2.5 w-2.5" />
+                                  recém-migrada
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-0.5 font-mono text-[10.5px] text-text-muted">{a.sa}</div>
+                          </Link>
+                        </td>
+                        <td className="px-4 py-2.5 text-text-secondary">{a.squad}</td>
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <HealthPill status={a.health} />
+                            {a.liveIncident && (
+                              <span className="inline-flex items-center gap-1 text-[10.5px] uppercase tracking-wider text-failure">
+                                <LivePulse />
+                                live
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-mono text-text-primary">{a.uptime.toFixed(2)}%</td>
+                        <td className="px-4 py-2.5 text-right font-mono text-text-secondary">{a.p95Ms}ms</td>
+                        <td className={`px-4 py-2.5 text-right font-mono ${meta.text}`}>{a.errorRate.toFixed(2)}%</td>
+                        <td className="px-4 py-2.5 text-right font-mono text-text-secondary">{a.deploys7d}</td>
+                        <td className="px-4 py-2.5 text-right">
+                          <Link
+                            to={`/application-hub/${a.sa}`}
+                            className="inline-flex items-center gap-1 text-[11.5px] text-text-muted opacity-0 transition group-hover:opacity-100 hover:text-text-primary"
+                          >
+                            detalhe
+                            <ArrowRight className="h-3 w-3" />
+                          </Link>
+                        </td>
+                      </tr>
+                    )
                   })}
                 </tbody>
               </table>

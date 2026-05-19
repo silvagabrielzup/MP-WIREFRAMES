@@ -1,6 +1,15 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
 import {
   applicationHubs as applicationHubsSeed,
+  executionTemplateIds,
   workflows as workflowTemplates,
   type ApplicationHub,
   type WorkflowAsset,
@@ -151,6 +160,14 @@ type WorkflowsContextValue = {
 
   // ----- Façades sobre CRUD (mantidas pra retro-compat) -----
   addWorkflow: (templateOrAsset: string | WorkflowAsset) => Workflow | null
+  /**
+   * Upsert de um `ApplicationHub` na lista global. Se já existir um hub
+   * com o mesmo `hub.id`, o registro é substituído (mantém-se em sincronia
+   * com o último estado — ex.: seed `pending` vira `completed` quando o
+   * `wf-migration-vanilla` é concluído). Invocado pelo provider ao final
+   * do workflow primário de migração.
+   */
+  addApplicationHub: (hub: ApplicationHub) => void
   advanceStep: (workflowId: string) => void
   /**
    * Marca um step específico (por `stepId`) como concluído, sem exigir que
@@ -170,15 +187,17 @@ type WorkflowsContextValue = {
 const WorkflowsContext = createContext<WorkflowsContextValue | null>(null)
 
 /**
- * Templates cuja conclusão provisiona um `ApplicationHub`. Inclui o
- * onboarding primário (`wf-migration-vanilla`) e a execução server-side da
- * Migração Vanilla (`wf-onboarding-vanilla-exec`) — qualquer um dos dois
- * concluindo cria o hub (dedup vale por `hub.id`).
+ * Templates cuja conclusão provisiona um `ApplicationHub`. Hoje é o workflow
+ * primário de onboarding (`wf-migration-vanilla`) — o hub é criado quando o
+ * usuário fecha todos os 6 steps do checklist (mesmo momento em que o
+ * `CongratsAlert` substitui o card de onboarding).
  */
 const HUB_PROVISIONING_TEMPLATE_IDS: Set<string> = new Set([
   'wf-migration-vanilla',
-  'wf-onboarding-vanilla-exec',
 ])
+
+/** Intervalo entre auto-advances do pipeline server-side. */
+const AUTO_ADVANCE_INTERVAL_MS = 2500
 
 // =============================================================================
 // Helpers
@@ -230,6 +249,7 @@ function buildHubFromTemplate(template: WorkflowAsset): ApplicationHub {
   return {
     id: `ahub-${sa}`,
     sa,
+    status: 'completed',
     name: toFriendlyAppName(sa),
     projectId: SA_TO_PROJECT[sa] ?? `proj-${baseName}`,
     squad: SA_TO_SQUAD[sa] ?? `squad-${baseName.split('-')[0]}`,
@@ -337,8 +357,8 @@ function reconcileLegacyFields(wf: Workflow): Workflow {
   const status: WorkflowStatus = allDone
     ? 'completed'
     : wf.status === 'draft'
-    ? 'running'
-    : wf.status
+      ? 'running'
+      : wf.status
   const legacySteps: StepInstance[] = wf.steps.map((s) => ({
     id: s.id,
     title: s.title,
@@ -355,7 +375,12 @@ function reconcileLegacyFields(wf: Workflow): Workflow {
 
 export function WorkflowsProvider({ children }: { children: ReactNode }) {
   const [workflows, setWorkflows] = useState<Workflow[]>([])
-  const [extraHubs, setExtraHubs] = useState<ApplicationHub[]>(applicationHubsSeed)
+  // Hubs vêm de `database.json` (seed) + `addApplicationHub` (provisionado
+  // ao concluir o `wf-migration-vanilla`). Estado canônico — substituiu o
+  // antigo `wf.infraOnPlat` por-workflow.
+  const [applicationHubsState, setApplicationHubsState] = useState<ApplicationHub[]>(
+    applicationHubsSeed,
+  )
   const [appHubAlerts, setAppHubAlerts] = useState<AppHubAlert[]>([])
 
   // ---- CRUD ----
@@ -365,7 +390,7 @@ export function WorkflowsProvider({ children }: { children: ReactNode }) {
       const template =
         typeof templateOrAsset === 'string'
           ? workflowTemplates.find((w) => w.id === templateOrAsset) ??
-            findTemplateById(templateOrAsset)
+          findTemplateById(templateOrAsset)
           : templateOrAsset
       if (!template) return null
       const wf = buildWorkflowFromTemplate(template)
@@ -398,6 +423,18 @@ export function WorkflowsProvider({ children }: { children: ReactNode }) {
   // ---- Façades sobre o CRUD ----
 
   const addWorkflow = createWorkflow
+
+  const addApplicationHub = useCallback((hub: ApplicationHub) => {
+    setApplicationHubsState((prev) => {
+      const idx = prev.findIndex((h) => h.id === hub.id)
+      if (idx < 0) return [...prev, hub]
+      // Upsert: substitui o registro existente (ex.: status `pending` →
+      // `completed` quando o workflow primário conclui).
+      const next = prev.slice()
+      next[idx] = hub
+      return next
+    })
+  }, [])
 
   const advanceStep = useCallback((workflowId: string) => {
     let trajectoryEnded: Workflow | null = null
@@ -437,26 +474,19 @@ export function WorkflowsProvider({ children }: { children: ReactNode }) {
       return next
     })
 
-    // Provision infraOnPlat + alerta na conclusão da trajetória do workflow primário
+    // Provisiona hub + alerta na conclusão da trajetória do workflow primário
     if (trajectoryEnded) {
       const ended = trajectoryEnded as Workflow
       const template = findTemplateById(ended.slug)
       if (template && HUB_PROVISIONING_TEMPLATE_IDS.has(template.id)) {
-        const hub = buildHubFromTemplate(template)
-        setWorkflows((prev) =>
-          prev.map((wf) =>
-            wf.id === ended.id && !wf.infraOnPlat.some((h) => h.id === hub.id)
-              ? { ...wf, infraOnPlat: [...wf.infraOnPlat, hub] }
-              : wf,
-          ),
-        )
+        addApplicationHub(buildHubFromTemplate(template))
         const alert = buildAlertFromTemplate(template)
         setAppHubAlerts((prev) =>
           prev.some((a) => a.id === alert.id) ? prev : [...prev, alert],
         )
       }
     }
-  }, [])
+  }, [addApplicationHub])
 
   const completeStep = useCallback((workflowId: string, stepId: string) => {
     let trajectoryEnded: Workflow | null = null
@@ -505,27 +535,20 @@ export function WorkflowsProvider({ children }: { children: ReactNode }) {
       return next
     })
 
-    // Mirror de `advanceStep`: provisiona infraOnPlat + alerta ao concluir
-    // a trajetória completa do workflow primário.
+    // Mirror de `advanceStep`: provisiona hub + alerta ao concluir a
+    // trajetória completa do workflow primário.
     if (trajectoryEnded) {
       const ended = trajectoryEnded as Workflow
       const template = findTemplateById(ended.slug)
       if (template && HUB_PROVISIONING_TEMPLATE_IDS.has(template.id)) {
-        const hub = buildHubFromTemplate(template)
-        setWorkflows((prev) =>
-          prev.map((wf) =>
-            wf.id === ended.id && !wf.infraOnPlat.some((h) => h.id === hub.id)
-              ? { ...wf, infraOnPlat: [...wf.infraOnPlat, hub] }
-              : wf,
-          ),
-        )
+        addApplicationHub(buildHubFromTemplate(template))
         const alert = buildAlertFromTemplate(template)
         setAppHubAlerts((prev) =>
           prev.some((a) => a.id === alert.id) ? prev : [...prev, alert],
         )
       }
     }
-  }, [])
+  }, [addApplicationHub])
 
   const uncompleteStep = useCallback((workflowId: string, stepId: string) => {
     setWorkflows((prev) =>
@@ -603,21 +626,40 @@ export function WorkflowsProvider({ children }: { children: ReactNode }) {
     [],
   )
 
-  // Backward-compat: `applicationHubs` flatten infraOnPlat de todos os workflows
-  // somado com a seed estática (vazia por enquanto).
-  const applicationHubs = useMemo<ApplicationHub[]>(() => {
-    const fromWorkflows = workflows.flatMap((w) => w.infraOnPlat)
-    const all = [...extraHubs, ...fromWorkflows]
-    const seen = new Set<string>()
-    const deduped: ApplicationHub[] = []
-    for (const h of all) {
-      if (!seen.has(h.id)) {
-        seen.add(h.id)
-        deduped.push(h)
-      }
+  // Auto-advance global: aplica APENAS aos pipelines server-side
+  // (`executionTemplateIds`, ex.: `wf-onboarding-vanilla-exec`). O workflow
+  // primário de onboarding (`wf-migration-vanilla`) é manual — cada step do
+  // checklist é completado pelo usuário via `handleToggleStep` no Home; o
+  // provider não pode avançar sozinho ou a trajetória inteira é "queimada"
+  // sem dar tempo do exec rodar (causa CongratsAlert prematuro).
+  // Steps de approval (`canProgress=false`) pausam o auto-advance — só
+  // finalizam via `completeStep` disparado por UI de aprovação.
+  useEffect(() => {
+    const timers: number[] = []
+    for (const wf of workflows) {
+      if (wf.status !== 'running') continue
+      if (!executionTemplateIds.has(wf.templateId)) continue
+      const current = wf.steps.find((s) => s.status === 'in-progress')
+      if (!current) continue
+      if (!current.canProgress) continue
+      const wfId = wf.id
+      const t = window.setTimeout(() => {
+        advanceStep(wfId)
+      }, AUTO_ADVANCE_INTERVAL_MS)
+      timers.push(t)
     }
-    return deduped
-  }, [workflows, extraHubs])
+    return () => {
+      for (const t of timers) window.clearTimeout(t)
+    }
+  }, [workflows, advanceStep])
+
+  // `applicationHubs` é simplesmente o estado canônico (seed do
+  // `database.json` + qualquer hub adicionado via `addApplicationHub`).
+  // Antes havia um flatMap por `wf.infraOnPlat` — removido depois que o
+  // provisionamento passou pra `addApplicationHub`.
+  const applicationHubs = useMemo<ApplicationHub[]>(() => {
+    return applicationHubsState
+  }, [applicationHubsState])
 
   // Para o WorkflowTrackerList: combina workflows primários + execuções aninhadas
   // sob o mesmo array no contexto, pra que filtros existentes continuem
@@ -652,6 +694,7 @@ export function WorkflowsProvider({ children }: { children: ReactNode }) {
       applicationHubs,
       appHubAlerts,
       addWorkflow,
+      addApplicationHub,
       advanceStep,
       completeStep,
       uncompleteStep,
@@ -667,6 +710,7 @@ export function WorkflowsProvider({ children }: { children: ReactNode }) {
       applicationHubs,
       appHubAlerts,
       addWorkflow,
+      addApplicationHub,
       advanceStep,
       completeStep,
       uncompleteStep,
@@ -674,11 +718,6 @@ export function WorkflowsProvider({ children }: { children: ReactNode }) {
       resolveAgenticItem,
     ],
   )
-
-  // Use `extraHubs` so React knows the seed was consumed; the variable is
-  // referenced inside `applicationHubs` derivation above.
-  void extraHubs
-  void setExtraHubs
 
   return <WorkflowsContext.Provider value={value}>{children}</WorkflowsContext.Provider>
 }

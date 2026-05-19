@@ -1,10 +1,114 @@
 /**
  * Catálogo de assets agênticos do Management Plane.
  *
- * Por enquanto contém apenas o workflow "Migração Vanilla" — o schema é o contrato
- * definitivo, mesmo com um único item populado. Conforme novos workflows aparecerem,
- * basta adicioná-los ao array `workflows` mantendo a tipagem.
+ * Os dados ficam no banco local `./database.json`, modelado como 3 entidades
+ * relacionais: `assetsCatalog`, `workflowTrackers` e `applicationHubs` (+ as
+ * notificações do hub). Este módulo é a camada tipada de leitura: declara os
+ * types das entidades novas e ainda expõe a API legacy (`workflows`,
+ * `migrationWorkflow`, etc.) derivada por mapeamento new→old, pra que os
+ * consumidores existentes continuem funcionando enquanto migram pro schema
+ * novo.
  */
+
+import databaseJson from './database.json'
+
+// =============================================================================
+// Entidades novas (alinhadas com `PROGRESS.md` — 2026-05-19)
+// =============================================================================
+
+export type AssetCategory = 'workflows' | 'Skills' | 'MCP' | 'Sensors' | 'Apis'
+
+/** Passo de alto nível listado no Assets Catalog (apenas pra category=workflows). */
+export type AssetCatalogStep = {
+  id: string
+  name: string
+  description: string
+}
+
+/**
+ * Item do Assets Catalog. Campos `owner`/`status`/`maturity`/`type`/
+ * `dependencies`/`inputs`/`usage` são extensões opcionais sobre o spec — só
+ * existem em itens da category `workflows` e preservam metadata que a UI atual
+ * (`06-AssetsCatalog`) já consome.
+ */
+export type AssetCatalogItem = {
+  id: string
+  slug: string
+  category: AssetCategory
+  name: string
+  description: string
+  version: string
+  create_at: string
+  updated_at: string
+  steps?: AssetCatalogStep[]
+  // --- extensões pra category=workflows ---
+  owner?: string
+  type?: WorkflowType
+  status?: AssetStatus
+  maturity?: AssetMaturity
+  /** FK refs (ids) pra outros itens do Assets Catalog. */
+  dependencies?: {
+    skills: string[]
+    mcps: string[]
+    apis: string[]
+  }
+  inputs?: WorkflowInput[]
+  usage?: WorkflowUsage
+}
+
+export type WorkflowTrackerInnerStepType = 'Inference' | 'Computacional'
+
+/**
+ * Passo "stepper" do React Flow renderizado dentro de um outer step.
+ * Convenção: `type === 'Inference'` implica `needHumamAproval === true`.
+ * `isAprovadedByHumam === null` quando o usuário ainda não decidiu.
+ *
+ * Os nomes `needHumamAproval` e `isAprovadedByHumam` seguem o spec do
+ * `PROGRESS.md` (typos intencionais) — não renomeie sem alinhar com o autor.
+ */
+export type WorkflowTrackerInnerStep = {
+  type: WorkflowTrackerInnerStepType
+  name: string
+  slug: string
+  needHumamAproval: boolean
+  isAprovadedByHumam: boolean | null
+  /** Extensão: metadata do PR proposto pelo agente (apenas Inference). */
+  agentic?: AgenticPropositionMetadata
+}
+
+export type WorkflowTrackerStep = {
+  id: string
+  slug: string
+  name: string
+  description: string
+  steps: WorkflowTrackerInnerStep[]
+  // --- extensões legacy (alinhadas com OnboardingStep antigo) ---
+  required?: boolean
+  dependsOn?: string[]
+  completedOnClick?: boolean
+  ctaLabel?: string
+  /** Comando CLI exibido pelo card "clipboard rápido" do onboarding. */
+  clipboardCommand?: string
+  /** Se preenchido, este passo dispara o `WorkflowTracker` referenciado. */
+  triggers_workflow_tracker_id?: string
+}
+
+export type WorkflowTracker = {
+  id: string
+  slug: string
+  name: string
+  description: string
+  version: string
+  create_at: string
+  updated_at: string
+  assets_catalog_id: string
+  sa: string
+  steps: WorkflowTrackerStep[]
+}
+
+// =============================================================================
+// Types legacy — preservados pra retro-compat dos consumidores existentes
+// =============================================================================
 
 export type AssetStatus = 'draft' | 'beta' | 'stable' | 'deprecated'
 export type AssetMaturity = 'experimental' | 'production-ready'
@@ -23,24 +127,9 @@ export type OnboardingStep = {
   description: string
   required: boolean
   dependsOn: string[]
-  /**
-   * Quando true, o passo é considerado concluído assim que o usuário clica
-   * nele no card "Próximos passos" da Home — sem precisar de sinal externo.
-   * Usado para tarefas manuais cuja conclusão a plataforma não consegue
-   * detectar (ex.: instalar a CLI, solicitar permissão).
-   */
   completedOnClick: boolean
-  /** Texto do botão de CTA exibido no card "Próximos passos" da Home. */
   ctaLabel: string
-  /**
-   * Workflow disparado automaticamente quando este passo é concluído. A
-   * instância resultante aparece no Workflow Tracker como execução ligada.
-   */
   triggers?: WorkflowAsset
-  /**
-   * Passo agêntico — agente propõe uma alteração que precisa de aprovação
-   * humana explícita (Accept/Decline) antes de continuar o fluxo.
-   */
   agentic?: AgenticPropositionMetadata
 }
 
@@ -49,14 +138,12 @@ export type AgenticPropositionMetadata = {
   prTitle: string
   prAuthor: string
   prSummary: string
-  /** Conjunto de arquivos modificados; cada um expõe um diff unified-like. */
   files: AgenticPropositionFile[]
 }
 
 export type AgenticPropositionFile = {
   path: string
   language: string
-  /** Bloco de diff renderizado linha-a-linha. */
   hunks: AgenticPropositionHunk[]
 }
 
@@ -100,437 +187,35 @@ export type WorkflowAsset = {
   usage: WorkflowUsage
 }
 
-/**
- * Promoção HML — disparada quando o step-07 (Promover pra homologação) é
- * concluído. Rollout canário gradual com gate humano em 50%.
- */
-export const hmlPromotionWorkflow: WorkflowAsset = {
-  kind: 'workflow',
-  id: 'wf-promote-hml',
-  name: 'Promoção HML — ssa-pix-core',
-  version: '0.4.2',
-  owner: 'squad-vanilla-platform',
-  description:
-    'Rollout canário pra homologação com gate humano em 50% e auto-rollback por SLO. Disparado após validação em dev.',
-  type: 'rollout',
-  status: 'beta',
-  maturity: 'experimental',
-  onboardingSteps: [
-    {
-      id: 'hml-canary-5',
-      title: 'Canário 5% (Traffik)',
-      description: 'Direciona 5% do tráfego HML para a nova versão; observa p99 e erro %.',
-      required: true,
-      dependsOn: [],
-      completedOnClick: true,
-      ctaLabel: 'Subir pra 5%',
-    },
-    {
-      id: 'hml-canary-50',
-      title: 'Canário 50% (gate humano)',
-      description: 'Sobe pra 50% após approval; Komply valida policies de rede e dados.',
-      required: true,
-      dependsOn: ['hml-canary-5'],
-      completedOnClick: true,
-      ctaLabel: 'Aprovar 50%',
-    },
-    {
-      id: 'hml-canary-100',
-      title: 'Canário 100%',
-      description: 'Promove totalmente em HML; reset da janela de observação Datadog (1h).',
-      required: true,
-      dependsOn: ['hml-canary-50'],
-      completedOnClick: true,
-      ctaLabel: 'Promover pra 100%',
-    },
-    {
-      id: 'hml-smoke',
-      title: 'Smoke test pós-rollout',
-      description: 'Suíte de integração contra HML; valida checks de Komply / Pantheon.',
-      required: true,
-      dependsOn: ['hml-canary-100'],
-      completedOnClick: true,
-      ctaLabel: 'Rodar smoke',
-    },
-  ],
-  dependencies: {
-    skills: [],
-    mcps: ['traffik.canary', 'komply.evaluate', 'kaptain.deploy'],
-    apis: ['itau-datadog'],
-  },
-  inputs: [
-    {
-      name: 'sa_id',
-      type: 'string',
-      required: true,
-      description: 'SA alvo da promoção.',
-      default: 'ssa-pix-core',
-    },
-    {
-      name: 'approval_required',
-      type: 'boolean',
-      required: false,
-      description: 'Gate humano obrigatório em 50%.',
-      default: 'true',
-    },
-  ],
-  usage: { consumers: 1, runs7d: 1 },
-}
-
-/**
- * Pipeline disparado automaticamente quando o step-04 (Lançar workflow de
- * onboarding) é concluído. Roda os 4 verbos da Operação Vanilla (build,
- * deploy, migration, rollout) na SA configurada.
- */
-export const migrationExecutionWorkflow: WorkflowAsset = {
-  kind: 'workflow',
-  id: 'wf-onboarding-vanilla-exec',
-  name: 'Execução Vanilla — ssa-pix-core',
-  version: '0.4.2',
-  owner: 'squad-vanilla-platform',
-  description:
-    'Pipeline orquestrado disparado após o onboarding. Executa os 4 verbos da Operação Vanilla na SA configurada (build via Konstructor, deploy via Kaptain, migração de dados em dual-write e rollout canário pelo Traffik).',
-  type: 'migration',
-  status: 'beta',
-  maturity: 'experimental',
-  onboardingSteps: [
-    {
-      id: 'verb-build',
-      title: 'build · Konstructor',
-      description: 'Empacota imagem OCI a partir do pom.xml e publica em artifactory-itau.',
-      required: true,
-      dependsOn: [],
-      completedOnClick: true,
-      ctaLabel: 'Marcar build',
-    },
-    {
-      id: 'agentic-java-21-upgrade',
-      title: 'Atualizar runtime Java 8 → 21 (agêntico)',
-      description:
-        'Agente analisou o pom.xml e o Dockerfile, propôs PR migrando o runtime pra Java 21 LTS. Aprovação humana é obrigatória antes do deploy.',
-      required: true,
-      dependsOn: ['verb-build'],
-      completedOnClick: false,
-      ctaLabel: 'Revisar PR',
-      agentic: {
-        kind: 'pr',
-        prTitle: 'chore(runtime): upgrade Java 8 → 21 LTS',
-        prAuthor: 'agent · konstructor-java-bot',
-        prSummary:
-          'Substitui o runtime Java 8 (EOL) pelo OpenJDK 21 LTS via imagem base `itau-jdk-21:lts`. Atualiza pom.xml, Dockerfile e ajusta APIs deprecadas — adota records, switch expressions e var onde idiomático. Mantém compatibilidade binária com clients Spring 5.x via shim de bytecode.',
-        files: [
-          {
-            path: 'pom.xml',
-            language: 'xml',
-            hunks: [
-              {
-                header: '@@ -17,7 +17,7 @@ <properties>',
-                lines: [
-                  { kind: 'context', text: '  <properties>' },
-                  { kind: 'del', text: '    <java.version>1.8</java.version>' },
-                  { kind: 'add', text: '    <java.version>21</java.version>' },
-                  { kind: 'context', text: '    <spring-boot.version>3.2.5</spring-boot.version>' },
-                  { kind: 'context', text: '  </properties>' },
-                ],
-              },
-              {
-                header: '@@ -42,9 +42,12 @@ <build>',
-                lines: [
-                  { kind: 'context', text: '      <plugin>' },
-                  { kind: 'context', text: '        <artifactId>maven-compiler-plugin</artifactId>' },
-                  { kind: 'del', text: '        <configuration>' },
-                  { kind: 'del', text: '          <source>1.8</source>' },
-                  { kind: 'del', text: '          <target>1.8</target>' },
-                  { kind: 'del', text: '        </configuration>' },
-                  { kind: 'add', text: '        <configuration>' },
-                  { kind: 'add', text: '          <release>21</release>' },
-                  { kind: 'add', text: '          <compilerArgs><arg>--enable-preview</arg></compilerArgs>' },
-                  { kind: 'add', text: '        </configuration>' },
-                  { kind: 'context', text: '      </plugin>' },
-                ],
-              },
-            ],
-          },
-          {
-            path: 'Dockerfile',
-            language: 'dockerfile',
-            hunks: [
-              {
-                header: '@@ -1,6 +1,6 @@',
-                lines: [
-                  { kind: 'del', text: 'FROM openjdk:8-jre-slim' },
-                  { kind: 'add', text: 'FROM artifactory-itau.local/itau-jdk-21:lts' },
-                  { kind: 'context', text: '' },
-                  { kind: 'context', text: 'WORKDIR /app' },
-                  { kind: 'context', text: 'COPY target/pix-core-*.jar app.jar' },
-                  { kind: 'del', text: 'CMD ["java","-jar","app.jar"]' },
-                  { kind: 'add', text: 'CMD ["java","--enable-preview","-jar","app.jar"]' },
-                ],
-              },
-            ],
-          },
-          {
-            path: 'src/main/java/com/itau/pix/PaymentService.java',
-            language: 'java',
-            hunks: [
-              {
-                header: '@@ -23,12 +23,9 @@ public class PaymentService {',
-                lines: [
-                  { kind: 'context', text: '  public TransactionResult process(Transaction tx) {' },
-                  { kind: 'del', text: '    String status;' },
-                  { kind: 'del', text: '    switch (tx.getType()) {' },
-                  { kind: 'del', text: '      case PIX: status = "ok"; break;' },
-                  { kind: 'del', text: '      case TED: status = "ok"; break;' },
-                  { kind: 'del', text: '      default:  status = "unsupported";' },
-                  { kind: 'del', text: '    }' },
-                  { kind: 'add', text: '    var status = switch (tx.getType()) {' },
-                  { kind: 'add', text: '      case PIX, TED -> "ok";' },
-                  { kind: 'add', text: '      default -> "unsupported";' },
-                  { kind: 'add', text: '    };' },
-                  { kind: 'context', text: '    return new TransactionResult(tx.getId(), status);' },
-                  { kind: 'context', text: '  }' },
-                ],
-              },
-            ],
-          },
-          {
-            path: 'src/main/java/com/itau/pix/dto/PaymentDto.java',
-            language: 'java',
-            hunks: [
-              {
-                header: '@@ -1,15 +1,3 @@',
-                lines: [
-                  { kind: 'del', text: 'public class PaymentDto {' },
-                  { kind: 'del', text: '  private final String id;' },
-                  { kind: 'del', text: '  private final BigDecimal amount;' },
-                  { kind: 'del', text: '  public PaymentDto(String id, BigDecimal amount) {' },
-                  { kind: 'del', text: '    this.id = id;' },
-                  { kind: 'del', text: '    this.amount = amount;' },
-                  { kind: 'del', text: '  }' },
-                  { kind: 'del', text: '  public String getId() { return id; }' },
-                  { kind: 'del', text: '  public BigDecimal getAmount() { return amount; }' },
-                  { kind: 'del', text: '}' },
-                  { kind: 'add', text: 'public record PaymentDto(String id, BigDecimal amount) {}' },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-    },
-    {
-      id: 'verb-deploy',
-      title: 'deploy · Kaptain',
-      description: 'Provisiona infra em dev via CloudFormation e sobe o app em ECS Fargate.',
-      required: true,
-      dependsOn: ['agentic-java-21-upgrade'],
-      completedOnClick: true,
-      ctaLabel: 'Marcar deploy',
-    },
-    {
-      id: 'verb-migration',
-      title: 'migration · dual-write',
-      description: 'Ativa dual-write entre Oracle legado e Aurora alvo; valida lag p99 < 200ms.',
-      required: true,
-      dependsOn: ['verb-deploy'],
-      completedOnClick: true,
-      ctaLabel: 'Marcar migration',
-    },
-    {
-      id: 'verb-rollout',
-      title: 'rollout · Traffik',
-      description: 'Rollout canário 5% → 50% → 100% com gate humano em 50% e auto-rollback por SLO.',
-      required: true,
-      dependsOn: ['verb-migration'],
-      completedOnClick: true,
-      ctaLabel: 'Marcar rollout',
-    },
-  ],
-  dependencies: {
-    skills: ['scaffold-vanilla-app'],
-    mcps: ['konstructor.build', 'kaptain.deploy', 'traffik.canary', 'pantheon.topic_create'],
-    apis: ['itau-cmdb', 'itau-datadog'],
-  },
-  inputs: [
-    {
-      name: 'sa_id',
-      type: 'string',
-      required: true,
-      description: 'SA alvo da execução.',
-      default: 'ssa-pix-core',
-    },
-    {
-      name: 'canary_percent',
-      type: 'number',
-      required: false,
-      description: 'Percentual inicial do rollout canário.',
-      default: '5',
-    },
-  ],
-  usage: { consumers: 1, runs7d: 1 },
-}
-
-export const migrationWorkflow: WorkflowAsset = {
-  kind: 'workflow',
-  id: 'wf-migration-vanilla',
-  name: 'Migração Vanilla',
-  version: '0.4.2',
-  owner: 'squad-vanilla-platform',
-  description:
-    'Migra uma SA brownfield para o padrão Operação Vanilla on-platform. Cobre build, deploy, migração de dados e rollout canário com aprovação humana entre fases.',
-  type: 'migration',
-  status: 'beta',
-  maturity: 'experimental',
-  onboardingSteps: [
-    {
-      id: 'step-01-install-cli',
-      title: 'Instalar CLI do StackSpot',
-      description: 'Binário oficial + autenticação inicial com SSO Itaú.',
-      required: true,
-      dependsOn: [],
-      completedOnClick: true,
-      ctaLabel: 'Baixar CLI',
-    },
-    {
-      id: 'step-02-permission-cloud',
-      title: 'Permissionar acesso ao Itaú Cloud',
-      description: 'Solicitar role e aguardar aprovação automatizada.',
-      required: true,
-      dependsOn: ['step-01-install-cli'],
-      completedOnClick: true,
-      ctaLabel: 'Solicitar acesso',
-    },
-    {
-      id: 'step-03-select-repos',
-      title: 'Selecionar repos pra migração',
-      description: 'Escolher quais repositórios entram na primeira leva.',
-      required: true,
-      dependsOn: ['step-02-permission-cloud'],
-      completedOnClick: false,
-      ctaLabel: 'Selecionar repos',
-    },
-    {
-      id: 'step-04-configure-workflow',
-      title: 'Lançar workflow de onboarding',
-      description: 'Parametrizar verbos da Operação Vanilla pro repo selecionado.',
-      required: true,
-      dependsOn: ['step-03-select-repos'],
-      completedOnClick: true,
-      ctaLabel: 'Lançar workflow',
-      triggers: migrationExecutionWorkflow,
-    },
-    {
-      id: 'step-06-validate-dev',
-      title: 'Validar resultado em dev',
-      description: 'Conferir saúde do workflow, logs e checks de Komply.',
-      required: true,
-      dependsOn: ['step-04-configure-workflow'],
-      completedOnClick: true,
-      ctaLabel: 'Ver checks',
-    },
-    {
-      id: 'step-07-promote-hml',
-      title: 'Promover pra homologação',
-      description: 'Disparar rollout canário com gate humano em 50%.',
-      required: true,
-      dependsOn: ['step-06-validate-dev'],
-      completedOnClick: true,
-      ctaLabel: 'Promover pra HML',
-      triggers: hmlPromotionWorkflow,
-    },
-  ],
-  dependencies: {
-    skills: ['scaffold-vanilla-app', 'review-pr-comments', 'plan-data-migration'],
-    mcps: ['kaptain.deploy', 'komply.evaluate', 'pantheon.topic_create'],
-    apis: ['itau-iam', 'itau-cmdb', 'itau-datadog'],
-  },
-  inputs: [
-    {
-      name: 'sa_id',
-      type: 'string',
-      required: true,
-      description: 'Identificador SA alvo (ex: ssa-pix-core).',
-    },
-    {
-      name: 'target_env',
-      type: 'enum(dev|hml|prod)',
-      required: true,
-      description: 'Ambiente de destino para o rollout canário.',
-      default: 'hml',
-    },
-    {
-      name: 'data_strategy',
-      type: 'enum(dual-write|cutover)',
-      required: false,
-      description: 'Estratégia de migração de dados.',
-      default: 'dual-write',
-    },
-    {
-      name: 'auto_decommission',
-      type: 'boolean',
-      required: false,
-      description: 'Desligar pilha legada automaticamente após observação.',
-      default: 'false',
-    },
-  ],
-  usage: { consumers: 4, runs7d: 11 },
-}
-
-export const workflows: WorkflowAsset[] = [migrationWorkflow]
-
-/**
- * Conjunto de IDs de workflows que são execuções "ligadas" — disparados via
- * `step.triggers` por outro template. Usado pra separar instâncias primárias
- * (Home / onboarding) de instâncias de execução (Workflow Tracker).
- */
-export const executionTemplateIds: Set<string> = new Set(
-  workflows.flatMap((t) =>
-    t.onboardingSteps
-      .map((s) => s.triggers?.id)
-      .filter((id): id is string => Boolean(id)),
-  ),
-)
-
-// -----------------------------------------------------------------------------
+// =============================================================================
 // Application Hub
-// -----------------------------------------------------------------------------
+// =============================================================================
 
 export type ApplicationHubHealth = 'healthy' | 'warn' | 'fail'
 
+/**
+ * Estado do provisionamento do hub. `pending` = provisioning rodando,
+ * `completed` = hub pronto e visível, `failed` = abortou. A tela
+ * `04-ApplicationHub` filtra por `status === 'completed'`.
+ */
+export type ApplicationHubStatus = 'pending' | 'completed' | 'failed'
+
 export type ApplicationHub = {
-  /** Identificador interno do hub (chave estrangeira em notificações). */
   id: string
-  /** SA Itaú (Sigla App) — também usado como slug de URL. */
   sa: string
-  /** Nome amigável da aplicação (ex.: "Pix Core"). */
   name: string
-  /** Projeto/programa ao qual a SA pertence. */
   projectId: string
   squad: string
-  /** App migrado pra plataforma StackSpot. */
   onPlat: boolean
+  status: ApplicationHubStatus
   health: ApplicationHubHealth
   liveIncident: boolean
-  /** Uptime últimas 24h (%). */
   uptime: number
-  /** Latência p95 em ms. */
   p95Ms: number
-  /** Taxa de erro últimas 24h (%). */
   errorRate: number
-  /** Deploys nos últimos 7 dias. */
   deploys7d: number
 }
 
-export const applicationHubs: ApplicationHub[] = []
-
-// -----------------------------------------------------------------------------
-// Application Hub Notifications
-// -----------------------------------------------------------------------------
-
-/**
- * Nome do ícone lucide-react renderizado pela UI da notificação. Mantido como
- * string para evitar acoplar database.ts à camada de renderização.
- */
 export type ApplicationHubNotificationIcon =
   | 'CheckCircle2'
   | 'AlertTriangle'
@@ -544,24 +229,133 @@ export type ApplicationHubNotification = {
   title: string
   description: string
   cta: string
-  /** Rota interna para onde o CTA leva — listagem/detalhe do Application Hub. */
   link: string
-  /** FK para `ApplicationHub.id`. */
   applicationHubId: string
-  /** FK para o projeto agregador (também presente no hub). */
   projectId: string
 }
 
-export const applicationHubNotifications: ApplicationHubNotification[] = [
-  {
-    id: 'notif-hml-provisioned-ssa-pix-core',
-    icon: 'CheckCircle2',
-    title: 'Application Hub HML provisionado',
-    description:
-      'A pilha de homologação de ssa-pix-core foi provisionada e está saudável (p95 184ms, erro 0.42%). Acompanhe a saúde da aplicação direto no Application Hub.',
-    cta: 'Ver saúde em HML',
-    link: '/application-hub/ssa-pix-core?env=hml',
-    applicationHubId: 'ahub-ssa-pix-core',
-    projectId: 'proj-pix-platform',
-  },
-]
+// =============================================================================
+// Exports — novos (entidades relacionais)
+// =============================================================================
+
+export const assetsCatalog: AssetCatalogItem[] =
+  databaseJson.assetsCatalog as AssetCatalogItem[]
+
+export const workflowTrackers: WorkflowTracker[] =
+  databaseJson.workflowTrackers as WorkflowTracker[]
+
+export const applicationHubs: ApplicationHub[] =
+  databaseJson.applicationHubs as ApplicationHub[]
+
+export const applicationHubNotifications: ApplicationHubNotification[] =
+  databaseJson.applicationHubNotifications as ApplicationHubNotification[]
+
+// =============================================================================
+// Compat layer — re-deriva a API legacy a partir das entidades novas
+// =============================================================================
+
+const catalogById: Map<string, AssetCatalogItem> = new Map(
+  assetsCatalog.map((c) => [c.id, c]),
+)
+const catalogBySlug: Map<string, AssetCatalogItem> = new Map(
+  assetsCatalog.map((c) => [c.slug, c]),
+)
+const trackerById: Map<string, WorkflowTracker> = new Map(
+  workflowTrackers.map((t) => [t.id, t]),
+)
+
+/** Resolve `cat-skill-foo` (id) ou `foo` (slug) → slug em string pra API legacy. */
+function resolveDependencySlug(idOrSlug: string): string {
+  return catalogById.get(idOrSlug)?.slug ?? idOrSlug
+}
+
+function buildOnboardingStep(step: WorkflowTrackerStep): OnboardingStep {
+  const agenticInner = step.steps.find((s) => s.agentic)
+  return {
+    id: step.id,
+    title: step.name,
+    description: step.description,
+    required: step.required ?? true,
+    dependsOn: step.dependsOn ?? [],
+    completedOnClick: step.completedOnClick ?? true,
+    ctaLabel: step.ctaLabel ?? 'Avançar',
+    triggers: step.triggers_workflow_tracker_id
+      ? buildWorkflowAssetFromTrackerId(step.triggers_workflow_tracker_id)
+      : undefined,
+    agentic: agenticInner?.agentic,
+  }
+}
+
+function buildWorkflowAssetFromTrackerId(trackerId: string): WorkflowAsset {
+  const tracker = trackerById.get(trackerId)
+  if (!tracker) throw new Error(`WorkflowTracker ${trackerId} não encontrado.`)
+  return buildWorkflowAsset(tracker)
+}
+
+function buildWorkflowAsset(tracker: WorkflowTracker): WorkflowAsset {
+  const catalog = catalogById.get(tracker.assets_catalog_id)
+  if (!catalog) {
+    throw new Error(
+      `AssetCatalog ${tracker.assets_catalog_id} não encontrado pro tracker ${tracker.id}.`,
+    )
+  }
+  const deps = catalog.dependencies ?? { skills: [], mcps: [], apis: [] }
+  return {
+    kind: 'workflow',
+    id: tracker.slug,
+    name: tracker.name,
+    version: tracker.version,
+    owner: catalog.owner ?? 'unknown',
+    description: tracker.description,
+    type: catalog.type ?? 'custom',
+    status: catalog.status ?? 'beta',
+    maturity: catalog.maturity ?? 'experimental',
+    onboardingSteps: tracker.steps.map(buildOnboardingStep),
+    dependencies: {
+      skills: deps.skills.map(resolveDependencySlug),
+      mcps: deps.mcps.map(resolveDependencySlug),
+      apis: deps.apis.map(resolveDependencySlug),
+    },
+    inputs: catalog.inputs ?? [],
+    usage: catalog.usage ?? { consumers: 0, runs7d: 0 },
+  }
+}
+
+/** Trackers "top-level" = não são alvo de `triggers_workflow_tracker_id` de outro. */
+const triggeredTrackerIds = new Set(
+  workflowTrackers.flatMap((t) =>
+    t.steps
+      .map((s) => s.triggers_workflow_tracker_id)
+      .filter((id): id is string => Boolean(id)),
+  ),
+)
+
+export const workflows: WorkflowAsset[] = workflowTrackers
+  .filter((t) => !triggeredTrackerIds.has(t.id))
+  .map(buildWorkflowAsset)
+
+function requireWorkflowBySlug(slug: string): WorkflowAsset {
+  const found = workflowTrackers.find((t) => t.slug === slug)
+  if (!found) throw new Error(`WorkflowTracker com slug ${slug} ausente.`)
+  return buildWorkflowAsset(found)
+}
+
+export const migrationWorkflow: WorkflowAsset =
+  requireWorkflowBySlug('wf-migration-vanilla')
+export const migrationExecutionWorkflow: WorkflowAsset =
+  requireWorkflowBySlug('wf-onboarding-vanilla-exec')
+
+/**
+ * IDs (slugs legacy) dos workflows que são execuções "ligadas" — disparados
+ * via `step.triggers` por outro template. Usado pra separar instâncias
+ * primárias (Home / onboarding) de instâncias de execução (Workflow Tracker).
+ */
+export const executionTemplateIds: Set<string> = new Set(
+  workflowTrackers
+    .filter((t) => triggeredTrackerIds.has(t.id))
+    .map((t) => t.slug),
+)
+
+// Re-export pra evitar warning de `catalogBySlug` não usado em strict mode.
+// Pode ser útil pra consumidores futuros olharem catalog por slug.
+export { catalogBySlug }
