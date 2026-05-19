@@ -639,7 +639,7 @@
         }
       ]
     }
-  ],
+  ], 
   "applicationHubs": [
     {
       "id": "ahub-ssa-pix-core",
