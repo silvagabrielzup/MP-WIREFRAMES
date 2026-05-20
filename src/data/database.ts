@@ -29,7 +29,7 @@ export type AssetCatalogStep = {
  * Item do Assets Catalog. Campos `owner`/`status`/`maturity`/`type`/
  * `dependencies`/`inputs`/`usage` são extensões opcionais sobre o spec — só
  * existem em itens da category `workflows` e preservam metadata que a UI atual
- * (`06-AssetsCatalog`) já consome.
+ * (`AssetsCatalog`) já consome.
  */
 export type AssetCatalogItem = {
   id: string

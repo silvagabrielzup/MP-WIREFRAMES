@@ -7,7 +7,21 @@
       "Bash(git add *)",
       "Bash(awk END{print NR} *)",
       "WebSearch",
-      "PowerShell(gh pr *)"
+      "PowerShell(gh pr *)",
+      "Bash(npx tsc *)",
+      "Bash(npx eslint *)",
+      "Bash(node -e \"const db=require\\('./src/data/database.json'\\); console.log\\(Object.keys\\(db\\)\\)\")",
+      "Bash(node *)",
+      "Bash(git mv *)",
+      "Bash(ls src/components/ui/)",
+      "Bash(ls src/components/)",
+      "Bash(ls src/lib/)",
+      "Bash(ls src/styles/)",
+      "Bash(ls components.json)",
+      "Bash(dir src\\\\lib)",
+      "Bash(dir src\\\\styles)",
+      "Bash(dir components.json)",
+      "Bash(echo \"Exit: $?\")"
     ]
   }
 }

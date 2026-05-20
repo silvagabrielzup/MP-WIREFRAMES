@@ -668,5 +668,155 @@
       "applicationHubId": "ahub-ssa-pix-core",
       "projectId": "proj-pix-platform"
     }
+  ],
+
+  "availableSas": [
+    { "id": "ssa-pix-core", "name": "Pix Core", "squad": "squad-pix" },
+    { "id": "ssa-conta-corrente", "name": "Conta Corrente", "squad": "squad-cc" },
+    { "id": "ssa-investimentos", "name": "Investimentos", "squad": "squad-invest" },
+    { "id": "ssa-cartoes", "name": "Cartões", "squad": "squad-cartoes" }
+  ],
+
+  "saRepositories": [
+    { "id": "repo-pix-core", "saId": "ssa-pix-core", "name": "pix-core", "kind": "code", "stack": "Java 17 · Spring Boot 3.2", "size": "184 MB", "platStatus": "OFF-PLAT", "techDebtCount": 4 },
+    { "id": "repo-pix-core-pipeline", "saId": "ssa-pix-core", "name": "pix-core-pipeline", "kind": "ci-cd", "stack": "Groovy · Jenkins lib", "size": "4.2 MB", "platStatus": "OFF-PLAT", "techDebtCount": 3 },
+    { "id": "repo-pix-core-infra", "saId": "ssa-pix-core", "name": "pix-core-infra", "kind": "infra", "stack": "Terraform 1.5 · AWS", "size": "18 MB", "platStatus": "OFF-PLAT", "techDebtCount": 2 },
+    { "id": "repo-pix-core-db", "saId": "ssa-pix-core", "name": "pix-core-db", "kind": "db", "stack": "Liquibase · Aurora", "size": "2.8 MB", "platStatus": "OFF-PLAT", "techDebtCount": 1 },
+    { "id": "repo-pix-core-config", "saId": "ssa-pix-core", "name": "pix-core-config", "kind": "config", "stack": "YAML · K8s manifests", "size": "780 KB", "platStatus": "OFF-PLAT", "techDebtCount": 2 }
+  ],
+
+  "cliAdvantages": [
+    { "id": "adv-automation", "order": 1, "iconName": "Zap", "title": "Automação", "detail": "Roda em scripts, CI/CD e githooks; não depende de cliques." },
+    { "id": "adv-reproducible", "order": 2, "iconName": "Repeat", "title": "Reprodutibilidade", "detail": "Mesmo comando, mesmo resultado. Idempotente por design." },
+    { "id": "adv-versioned", "order": 3, "iconName": "GitBranch", "title": "Versionável", "detail": "Fluxos viram código: commit, code review, rollback no git." },
+    { "id": "adv-speed", "order": 4, "iconName": "Activity", "title": "Velocidade", "detail": "Execução direta, sem context-switch pra browser." },
+    { "id": "adv-composable", "order": 5, "iconName": "Layers", "title": "Composável", "detail": "Pipe com jq, grep, xargs; integra com toolchain existente." },
+    { "id": "adv-offline", "order": 6, "iconName": "CloudOff", "title": "Offline-friendly", "detail": "Auth cacheada localmente; funciona offline em read-only." },
+    { "id": "adv-power", "order": 7, "iconName": "PlugZap", "title": "Power-user", "detail": "Flags --watch, --json, --dry-run reduzem fricção em fluxos avançados." }
+  ],
+
+  "migrationViabilityChecks": [
+    { "id": "vc-komply", "engine": "Komply", "status": "pass", "detail": "Políticas de segurança e licenciamento alinhadas com o monorepo Vanilla." },
+    { "id": "vc-kaptain", "engine": "Kaptain", "status": "pass", "detail": "Pipeline de deploy compatível; canário roteável via Traffik." },
+    { "id": "vc-konstructor", "engine": "Konstructor", "status": "pass", "detail": "Build segmentado por módulo; cache de dependências OK." },
+    { "id": "vc-pantheon", "engine": "Pantheon", "status": "warn", "detail": "Topic Kafka legado precisa de migração — tooling já provisionado." },
+    { "id": "vc-migration", "engine": "Migration", "status": "pass", "detail": "Schema versionado por Liquibase com idempotência verificada." }
+  ],
+
+  "migrationVerbs": [
+    { "id": "verb-build", "order": 1, "label": "build", "iconName": "Wrench", "status": "idle" },
+    { "id": "verb-deploy", "order": 2, "label": "deploy", "iconName": "Rocket", "status": "idle" },
+    { "id": "verb-migration", "order": 3, "label": "migration", "iconName": "Database", "status": "idle" },
+    { "id": "verb-rollout", "order": 4, "label": "rollout", "iconName": "Activity", "status": "idle" }
+  ],
+
+  "monorepoComparisons": [
+    { "id": "cmp-context", "order": 1, "label": "Contexto agêntico", "before": "5 repos", "after": "1 monorepo" },
+    { "id": "cmp-prs", "order": 2, "label": "PRs por mudança", "before": "3–4 PRs", "after": "1 PR atômico" },
+    { "id": "cmp-drift", "order": 3, "label": "Drift entre repos", "before": "comum", "after": "impossível" }
+  ],
+
+  "migrationTreeDiffs": [
+    {
+      "id": "tdf-ssa-pix-core",
+      "saId": "ssa-pix-core",
+      "before": [
+        {
+          "name": "pix-core",
+          "type": "dir",
+          "defaultOpen": true,
+          "children": [
+            { "name": "src/", "type": "dir", "children": [{ "name": "main", "type": "dir" }, { "name": "test", "type": "dir" }] },
+            { "name": "pom.xml", "type": "file" },
+            { "name": "Dockerfile", "type": "file" }
+          ]
+        },
+        { "name": "pix-core-pipeline", "type": "dir", "children": [{ "name": "Jenkinsfile", "type": "file" }, { "name": "shared/", "type": "dir" }] },
+        { "name": "pix-core-infra", "type": "dir", "children": [{ "name": "modules/", "type": "dir" }, { "name": "envs/", "type": "dir" }] },
+        { "name": "pix-core-db", "type": "dir", "children": [{ "name": "changelog/", "type": "dir" }, { "name": "migrations/", "type": "dir" }] },
+        { "name": "pix-core-config", "type": "dir", "children": [{ "name": "k8s/", "type": "dir" }] }
+      ],
+      "after": {
+        "name": "vanilla-monorepo",
+        "type": "dir",
+        "defaultOpen": true,
+        "children": [
+          {
+            "name": "apps",
+            "type": "dir",
+            "defaultOpen": true,
+            "children": [
+              {
+                "name": "ssa-pix-core",
+                "type": "dir",
+                "defaultOpen": true,
+                "action": "added",
+                "children": [
+                  { "name": "src/", "type": "dir", "action": "moved" },
+                  { "name": "pom.xml", "type": "file", "action": "moved" },
+                  { "name": "Dockerfile", "type": "file", "action": "moved" },
+                  { "name": "ci/", "type": "dir", "action": "moved" },
+                  { "name": "infra/", "type": "dir", "action": "moved" },
+                  { "name": "db/", "type": "dir", "action": "moved" },
+                  { "name": "config/", "type": "dir", "action": "moved" },
+                  { "name": "kaptain.yaml", "type": "file", "action": "added" },
+                  { "name": "komply.yaml", "type": "file", "action": "added" }
+                ]
+              }
+            ]
+          },
+          { "name": "tooling/", "type": "dir", "action": "added" }
+        ]
+      }
+    }
+  ],
+
+  "onboardingChecklistContent": [
+    {
+      "id": "occ-step-01-setup-cli",
+      "workflowSlug": "wf-migration-vanilla",
+      "stepId": "step-01-setup-cli",
+      "order": 1,
+      "iconName": "Terminal",
+      "clipboardCommand": "curl -fsSL https://stackspot.itau/install.sh | sh",
+      "claudeCodeInstallCommand": "curl -fsSL https://claude.ai/install.sh | sh",
+      "recommendedVersion": "v1.4.2"
+    },
+    {
+      "id": "occ-step-02-login",
+      "workflowSlug": "wf-migration-vanilla",
+      "stepId": "step-02-login",
+      "order": 2,
+      "iconName": "KeyRound",
+      "clipboardCommand": "stackspot auth login --realm itau",
+      "realm": "itau",
+      "tokenValidity": "12h (auto-renew)",
+      "sessionStatus": "não autenticado"
+    },
+    {
+      "id": "occ-step-03-select-sa",
+      "workflowSlug": "wf-migration-vanilla",
+      "stepId": "step-03-select-sa",
+      "order": 3,
+      "iconName": "Search",
+      "clipboardCommand": "stackspot context use --sa ssa-pix-core",
+      "defaultSaId": "ssa-pix-core"
+    },
+    {
+      "id": "occ-step-04-migration-overview",
+      "workflowSlug": "wf-migration-vanilla",
+      "stepId": "step-04-migration-overview",
+      "order": 4,
+      "iconName": "ShieldCheck",
+      "clipboardCommand": "stackspot migrate check"
+    },
+    {
+      "id": "occ-step-05-watch-tracker",
+      "workflowSlug": "wf-migration-vanilla",
+      "stepId": "step-05-watch-tracker",
+      "order": 5,
+      "iconName": "Activity",
+      "clipboardCommand": "stackspot migrate start && stackspot migrate status --watch"
+    }
   ]
 }

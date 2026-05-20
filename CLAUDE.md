@@ -1,73 +1,122 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guia para o agente Claude navegar e contribuir neste repositório.
 
-## What this is
+## O que é este projeto
 
-Low-fidelity wireframes for Itaú's "Management Plane" — the internal portal over StackSpot's agentic engineering platform. React 19 + TypeScript + Vite + Tailwind, dark theme only, no UI library (Tailwind primitives only — no shadcn even though it's in `package.json`). lucide-react for icons.
+Frontend do **Novo Portal da StackSpot** — SPA em React + TypeScript + Vite que
+consome APIs do backend via `@stack-spot/portal-network`. Os clients
+específicos vão sendo criados dentro da própria lib conforme os serviços do
+produto aparecem.
 
-All screens are mocked end-to-end with realistic data; there is no backend, no fetch layer, no state management. Each screen is one large `.tsx` file under `src/screens/`.
+Quando surgirem necessidades de formulários ou diagramas, usar as libs já
+fixadas pela stack (React Hook Form e `@xyflow/react`). Não são o foco do
+projeto — são as escolhas padrão para esses casos.
 
-## Commands
+A especificação completa vive em [specs/main.md](specs/main.md) — sempre que
+houver dúvida sobre stack, padrões ou setup, **comece por lá**.
 
-```bash
-npm run dev       # vite dev server
-npm run build     # tsc -b && vite build (TS errors fail the build)
-npm run lint      # eslint .
-npm run preview   # preview production build
+## Mapa rápido das specs
+
+A pasta [specs/](specs/) é a fonte da verdade do projeto. Antes de
+implementar qualquer coisa, leia o documento do tema correspondente:
+
+| Tarefa | Spec |
+|---|---|
+| Adicionar/alterar rotas, links, `navigation.yaml` | [specs/navegacao.md](specs/navegacao.md) |
+| Consumir endpoints, mutations, tratar erros | [specs/comunicacao-backend.md](specs/comunicacao-backend.md) |
+| Adicionar/usar texto visível ao usuário, trocar idioma | [specs/i18n.md](specs/i18n.md) |
+| Criar/usar Context (theme, prefs, modais globais) | [specs/estado-global.md](specs/estado-global.md) |
+| Extrair componente/hook/helper compartilhado | [specs/padroes.md](specs/padroes.md) §1 |
+| Adicionar componente de UI (shadcn / Base UI / Tailwind) | [specs/design-system.md](specs/design-system.md) + [specs/padroes.md](specs/padroes.md) §2 (estilo React-like) |
+| Criar formulário | [specs/formularios.md](specs/formularios.md) |
+| Mexer em diagrama (React Flow) | [specs/diagramas.md](specs/diagramas.md) |
+| Ajustar regras de lint / formatação | [specs/lint.md](specs/lint.md) |
+| Ajustar `tsconfig` / paths / strictness | [specs/typescript.md](specs/typescript.md) |
+| Variáveis de ambiente, scripts npm, dependências | [specs/main.md](specs/main.md) |
+
+## Estrutura atual do repositório
+
+```
+/
+├─ vite.config.ts
+├─ eslint.config.js           # flat config (ESLint 10)
+├─ tsconfig.json              # project references → app + node
+├─ tsconfig.app.json          # TS de src/ (strict + noUncheckedIndexedAccess)
+├─ tsconfig.node.json         # TS dos arquivos de build
+├─ index.html
+├─ package.json               # packageManager: npm@9.0.0
+├─ specs/                     # especificações (ler antes de implementar)
+└─ src/
+   ├─ main.tsx                
+   ├─ App.tsx                  
+   ├─ vite-env.d.ts
+   ├─ screens/                  # HomeView, DetailView, ...
+   ├─ components/
+   │  └─ ui/                  # componentes shadcn (Base UI por baixo)
+   ├─ lib/
+   │  └─ utils.ts             # cn() = clsx + tailwind-merge
+   └─ styles/                 # globals.css (Tailwind via @theme)
 ```
 
-There are no tests. Verification = `npm run build` succeeds and the screen renders in `npm run dev`.
+Pastas previstas pela spec que ainda **não** existem (criar quando necessário):
+`src/components/flow/`, `src/components/forms/`, `src/contexts/`,
+`src/features/`, `src/hooks/`.
 
-## The Ralph loop (how screens are generated)
+## Comandos
 
-This repo is driven by an autonomous loop, not by ad-hoc edits. `ralph.sh` calls `claude -p < PROMPT.md` up to 15 times; each invocation generates exactly ONE screen and stops. The contract is in `PROMPT.md`:
+| Comando | O que faz |
+|---|---|
+| `npm install` | Instala dependências 
+| `npm dev` |
+| `npm build` | `citron` + `tsc -b` + `vite build` |
+| `npm preview` | Serve o bundle de produção localmente |
+| `npm lint` | ESLint (descobre arquivos via flat config — sem `--ext`) |
 
-1. Read `PROGRESS.md`, pick the first `- [ ]` line. If none, print `RALPH_DONE`.
-2. Always read `specs/00-master-context.md` first.
-3. Read `specs/<NN>-<slug>.md` for the screen.
-4. If `src/screens/01-Home.tsx` exists and you're not generating 01, read it as the canonical design-system anchor.
-5. Write `src/screens/<NN>-<PascalName>.tsx`, register the route in `src/App.tsx`, flip `[ ]` → `[x]` in `PROGRESS.md` with an ISO timestamp + one-line summary, append decisions to `NOTES.md`, commit `feat(<NN>): <tela>`.
+> Se mexer em `navigation.yaml`, rode `npm citron` para atualizar
+> `src/generated/navigation.ts` antes de importar a rota nova.
 
-Rules: one screen per iteration, never regenerate `[x]` screens, never edit `specs/`. On ambiguity: decide, generate, log in `NOTES.md`. On conflict with a prior screen: mark `[!]` in PROGRESS and stop.
+## Regras inegociáveis (leia antes de gerar código)
 
-As of 2026-05-12 all seven screens (01–07) are `[x]`. Further iterations should either extend specs/PROGRESS with new `[ ]` entries or edit existing screens directly.
+1. **Sem ponto-e-vírgula**, aspas simples, vírgula final em multilinhas,
+   `max-len: 140`. Tudo aplicado pelo ESLint (ver [specs/lint.md](specs/lint.md)).
+2. **Toda chamada HTTP** passa pela `@stack-spot/portal-network`. **Nunca**
+   introduzir `fetch`/`axios`/`useQuery` manual neste repositório. Os clients
+   reais serão criados na própria lib conforme os serviços do backend
+   aparecerem — `accountAssetManagerClient` aparece nos exemplos das specs
+   apenas como ilustração da API da lib, **não é** o client que o portal
+   consome (ver [specs/comunicacao-backend.md](specs/comunicacao-backend.md)).
+3. **Erros** sempre via `error.translate()` — nunca `error.message`.
+3.1. **Todo texto visível ao usuário** (títulos, labels, botões, mensagens,
+   colunas de tabela, placeholders) vem de dicionário tipado consumido via
+   `useTranslate` do `@stack-spot/portal-translate`. Zero strings hard-coded
+   em PT ou EN na UI. Variáveis via `interpolate(t.key, ...)`, não template
+   literal. Sem i18next/react-intl/formatjs — quebra `error.translate()`
+   (ver [specs/i18n.md](specs/i18n.md)).
+4. **Não criar `QueryClientProvider`** — os clients da lib já trazem
+   `QueryClient` interno.
+5. **Roteamento**: usar `<Link>` do `@stack-spot/citron-navigator`, nunca `<a href>`
+   (URLs limpas = full reload). Props das views tipadas com `ViewPropsOf<'key'>`.
+6. **Estado server-side já está no cache dos clients da lib** — não duplicar
+   em Context. Context é só para UI (tema, prefs, modais globais).
+7. **Sem libs de estado global** (Redux/Zustand/Jotai) por padrão.
+8. **Formulários**: só `react-hook-form` com regras nativas — **sem Zod**, **sem
+   `@hookform/resolvers`**.
+9. **Sem Prettier**, sem `.prettierrc`, sem script `format` — formatação é
+   `npm lint:fix`.
+10. **Bootstrap**: `NetworkClient.setup` precisa rodar **antes** de qualquer
+    hook do client. Já garantido pelo `import './lib/session'` em `main.tsx` —
+    não reordenar.
+11. **Reaproveitamento**: código usado em 2+ lugares vira componente/hook/helper
+    compartilhado (ver [specs/padroes.md](specs/padroes.md) §1). Antes de criar
+    algo novo, procurar em `src/components/`, `src/hooks/` e `src/lib/`. Sem
+    extrair no primeiro uso — abstração especulativa atrapalha.
 
-## Architecture
+## Como contribuir com uma nova feature (checklist mental)
 
-- `src/App.tsx` — `BrowserRouter` with all routes nested under one `<Layout />`. Some screens have two route aliases (e.g. `/assets` and `/catalog`).
-- `src/components/Layout.tsx` — the only shared component. Fixed 240px sidebar (logo, nav, live dot footer) + sticky topbar (global search with ⌘K, env selector, bell, avatar) + `<Outlet />` in a `max-w-[1400px]` main. Screens render their own page chrome inside this.
-- `src/screens/NN-Name.tsx` — self-contained. Mock data, SVG charts (sparklines, donuts, dependency graphs) hand-rolled inline, no chart libs. Density is the point — don't simplify.
-
-When adding/editing a screen, read `01-Home.tsx` first; it's the canonical reference for spacing, type scale, badge/chip patterns, and color usage.
-
-## Design system (Tailwind extensions in `tailwind.config.js`)
-
-Named colors map to the master-context palette and are used everywhere — prefer them over raw hex:
-
-- Surfaces: `bg` (#0A0A0B), `surface` (#141518), `surface-2`, `border`, `border-strong`
-- Text: `text-primary`, `text-secondary`, `text-muted`
-- Brand: `accent` (StackSpot orange #FF6B2C), `accent-hover`
-- Status: `success`, `warning`, `failure`, `info`, `live` (#22D3EE, used with `animate-pulse-live` for real-time indicators)
-- Fonts: `font-sans` = Geist Variable, `font-mono` = Geist Mono Variable (use mono for SA names, IDs, timestamps)
-
-## Domain vocabulary (don't paraphrase in UI text)
-
-- **SA (Sigla App)** — Itaú's app identifier; the spine of the data model. Mock IDs follow `ssa-pix-core`, `ssa-conta-corrente`, `ssa-12345`.
-- **ON-PLAT** — app migrated to StackSpot (infra managed by the engines).
-- **7 motores deterministas** — Kaptain (CD/AWS), Komply (policies), Konstructor (build), Orkestra (K8s), Traffik (routing/DNS), Pantheon (Kafka), Migration (data migration). Each has its own status (ok/warn/fail).
-- **4 verbos da Operação Vanilla** — build, deploy, migration, rollout (the MVP scope; progress bars are segmented by these).
-- **IUConfia** — internal score (security + quality + performance), shown as donuts with deltas vs. previous month.
-- **Workflow states** — `running`, `awaiting human`, `failed`, `success`. Show a pulsing `live` dot when running.
-
-## Conventions worth following
-
-- Real-time-evident UI: pulsing live dot, "updated Ns ago", live counters on anything in motion.
-- High density, no placeholder filler. Tables show 10–25 rows of realistic mock data; sidebars show counts, distributions, recent activity.
-- Charts are inline SVG (sparklines `polyline` + translucent gradient area, donuts via `stroke-dasharray`). No chart libraries.
-- Page chrome lives inside the screen, not in `Layout` — breadcrumb, title row, filter bar, side panels are all per-screen.
-- Portuguese (pt-BR) for all user-facing copy.
-
-## TypeScript / config quirks
-
-`tsconfig.app.json` is strict (`noUnusedLocals`, `noUnusedParameters`, `noUncheckedSideEffectImports`, `verbatimModuleSyntax`). Build does `tsc -b` before `vite build`, so unused imports fail CI. `NOTES.md` documents past corrections to the scaffolding (broken paths in `tailwind.config.js`, `tsconfig*.json`, `vite.config.ts`) — if you see similar corruption, fix and note it there.
+1. Leia o doc inteiro antes de codar.
+2. Se for nova rota: edita `navigation.yaml` → `npm citron` → cria view em
+   `src/views/` → registra em `App.tsx`.
+3. Componentes novos de UI: rodar `npm dlx shadcn@latest add <componente>`
+4. Antes de declarar pronto: `npm lint` e `npm build` (que inclui `tsc -b`)
+   precisam passar.

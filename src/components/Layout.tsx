@@ -11,7 +11,7 @@ import {
 const navItems = [
   { to: '/workflows', label: 'Workflow Tracker', icon: Activity },
   { to: '/application-hub', label: 'Application Hub', icon: LayoutGrid },
-  { to: '/assets', label: 'Assets Catalog', icon: Boxes },
+  { to: '/assets-catalogs', label: 'Assets Catalog', icon: Boxes },
 ]
 
 export function Layout() {
